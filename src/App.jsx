@@ -259,4 +259,53 @@ export default function GimnasiaTorneos() {
                 onMouseLeave={e => e.currentTarget.style.background= i%2===0 ? "#fff" : "#faf8f5"}>
                 {columns.map(c => (
                   <td key={c.key} onClick={() => startEdit(row.id, c.key, row[c.key])}
-                    style={{ padding:"10px 14px", fontSize:13, color: c.numeric ? "#1a6e1a" : "#222", fontWeight: c.key==="nombre" ? "600" : "normal", cursor:"text", borderRight:"1px solid #f0ece6", minWidth:c.width, maxWidth:c.width, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:
+                    style={{ padding:"10px 14px", fontSize:13, color: c.numeric ? "#1a6e1a" : "#222", fontWeight: c.key==="nombre" ? "600" : "normal", cursor:"text", borderRight:"1px solid #f0ece6", minWidth:c.width, maxWidth:c.width, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                    {editingCell?.id===row.id && editingCell?.key===c.key ? (
+                      <input ref={inputRef} value={editValue} onChange={e => setEditValue(e.target.value)}
+                        onBlur={commitEdit} onKeyDown={e => { if(e.key==="Enter") commitEdit(); if(e.key==="Escape") setEditingCell(null); }}
+                        style={{ border:"none", outline:"2px solid #e8a020", borderRadius:3, padding:"2px 4px", width:"100%", fontSize:13, background:"#fffbf0" }} />
+                    ) : (
+                      c.numeric
+                        ? (row[c.key] != null ? `$${Number(row[c.key]).toLocaleString("es-AR")}` : "—")
+                        : (row[c.key] || "—")
+                    )}
+                  </td>
+                ))}
+                <td style={{ padding:"0 8px", textAlign:"center" }}>
+                  <button onClick={() => deleteRow(row.id)} style={{ background:"none", border:"none", cursor:"pointer", color:"#ccc", fontSize:16 }} title="Eliminar">×</button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <div style={{ marginTop:10, fontSize:12, color:"#888", textAlign:"right" }}>
+          {filtered.length} registros — Clic en cualquier celda para editar — Los cambios se guardan automáticamente
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Stat({ label, value, accent }) {
+  return (
+    <div style={{ textAlign:"center" }}>
+      <div style={{ fontSize:20, fontWeight:"bold", color: accent ? "#ff6b6b" : "#e8d5b7" }}>{value}</div>
+      <div style={{ fontSize:10, letterSpacing:2, textTransform:"uppercase", color:"#8899bb" }}>{label}</div>
+    </div>
+  );
+}
+
+function Btn({ children, onClick, color }) {
+  return (
+    <button onClick={onClick}
+      style={{ background:color, color:"#fff", border:"none", borderRadius:5, padding:"8px 16px", fontSize:13, cursor:"pointer", fontFamily:"Georgia,serif" }}
+      onMouseEnter={e => e.currentTarget.style.opacity="0.85"}
+      onMouseLeave={e => e.currentTarget.style.opacity="1"}>
+      {children}
+    </button>
+  );
+}
+
+const inputStyle = { border:"1px solid #ddd", borderRadius:5, padding:"7px 12px", fontSize:13, fontFamily:"Georgia,serif", outline:"none", background:"#fafafa", color:"#333" };
+const modalOverlay = { position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:100 };
+const modalBox = { background:"#fff", borderRadius:10, padding:"28px 32px", minWidth:320, maxWidth:420, width:"90%", boxShadow:"0 20px 60px rgba(0,0,0,0.3)" };
