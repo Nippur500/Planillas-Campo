@@ -146,6 +146,8 @@ export default function App() {
 
   const totalSeña = filtered.reduce((s, r) => s + (Number(r.seña) || 0), 0);
   const totalSaldo = filtered.reduce((s, r) => s + (Number(r.saldo) || 0), 0);
+  const conSeña = filtered.filter(r => r.seña).length;
+  const conSaldo = filtered.filter(r => r.saldo).length;
   const sinSaldo = filtered.filter(r => !r.saldo).length;
   const totalRecaudado = totalSeña + totalSaldo;
 
@@ -159,6 +161,7 @@ export default function App() {
       pendientes: rows.filter(r => !r.saldo).length,
     };
   });
+
   if (loading) return (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", background: "#0f172a", color: "#94a3b8", fontFamily: "system-ui, sans-serif", fontSize: 16 }}>
       Cargando datos...
@@ -168,6 +171,7 @@ export default function App() {
   return (
     <div style={{ fontFamily: "'Segoe UI', system-ui, sans-serif", background: "#0f172a", minHeight: "100vh", color: "#e2e8f0" }}>
 
+      {/* HEADER */}
       <div style={{ background: "#1e293b", borderBottom: "1px solid #334155", padding: "16px 24px", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <div style={{ width: 36, height: 36, background: "linear-gradient(135deg, #3b82f6, #8b5cf6)", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18 }}>🏅</div>
@@ -185,6 +189,7 @@ export default function App() {
         </div>
       </div>
 
+      {/* STATS BAR */}
       <div style={{ background: "#1e293b", borderBottom: "1px solid #1e293b", padding: "10px 24px", display: "flex", gap: 24, flexWrap: "wrap" }}>
         <StatPill label="Alumnos" value={filtered.length} color="#3b82f6" />
         <StatPill label="Señas cobradas" value={fmt(totalSeña)} color="#8b5cf6" />
@@ -200,6 +205,7 @@ export default function App() {
         </div>
       )}
 
+      {/* FILTERS */}
       <div style={{ padding: "12px 24px", display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
         <input placeholder="🔍  Buscar..." value={search} onChange={e => setSearch(e.target.value)}
           style={{ background: "#1e293b", border: "1px solid #334155", borderRadius: 7, padding: "8px 14px", color: "#e2e8f0", fontSize: 13, outline: "none", width: 220 }} />
@@ -210,14 +216,50 @@ export default function App() {
         <span style={{ marginLeft: "auto", fontSize: 12, color: "#475569" }}>{filtered.length} registros — clic en celda para editar</span>
       </div>
 
+      {/* TABLE */}
       <div style={{ overflowX: "auto", padding: "0 24px 32px" }}>
         <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 700 }}>
           <thead>
             <tr style={{ background: "#1e293b" }}>
               {columns.map(c => (
                 <th key={c.key} onClick={() => handleSort(c.key)}
-                  style={{ padding: "10px 12px", textAlign: "left", fontSize: 11, fontWeight: 60
-                          {showStats && (
+                  style={{ padding: "10px 12px", textAlign: "left", fontSize: 11, fontWeight: 600, letterSpacing: 1, textTransform: "uppercase", color: "#64748b", cursor: "pointer", whiteSpace: "nowrap", borderBottom: "1px solid #334155", userSelect: "none", minWidth: c.width }}>
+                  {c.label} {sortConfig?.key === c.key ? (sortConfig.dir === "asc" ? "↑" : "↓") : ""}
+                </th>
+              ))}
+              <th style={{ width: 32, borderBottom: "1px solid #334155" }}></th>
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.map((row, i) => (
+              <tr key={row.id} style={{ borderBottom: "1px solid #1e293b", background: i % 2 === 0 ? "#0f172a" : "#111827" }}
+                onMouseEnter={e => e.currentTarget.style.background = "#1e293b"}
+                onMouseLeave={e => e.currentTarget.style.background = i % 2 === 0 ? "#0f172a" : "#111827"}>
+                {columns.map(c => (
+                  <td key={c.key} onClick={() => startEdit(row.id, c.key, row[c.key])}
+                    style={{ padding: "9px 12px", fontSize: 13, color: c.numeric ? "#34d399" : c.key === "nombre" ? "#f1f5f9" : "#cbd5e1", fontWeight: c.key === "nombre" ? 500 : 400, cursor: "text", maxWidth: c.width, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {editingCell?.id === row.id && editingCell?.key === c.key ? (
+                      <input ref={inputRef} value={editValue} onChange={e => setEditValue(e.target.value)}
+                        onBlur={commitEdit} onKeyDown={e => { if (e.key === "Enter") commitEdit(); if (e.key === "Escape") setEditingCell(null); }}
+                        style={{ background: "#0f172a", border: "1px solid #3b82f6", borderRadius: 4, padding: "3px 6px", color: "#f1f5f9", fontSize: 13, width: "100%", outline: "none" }} />
+                    ) : (
+                      c.numeric ? fmt(row[c.key]) : (row[c.key] || <span style={{ color: "#334155" }}>—</span>)
+                    )}
+                  </td>
+                ))}
+                <td style={{ padding: "0 6px", textAlign: "center" }}>
+                  <button onClick={() => deleteRow(row.id)} style={{ background: "none", border: "none", color: "#334155", cursor: "pointer", fontSize: 16, lineHeight: 1 }}
+                    onMouseEnter={e => e.currentTarget.style.color = "#ef4444"}
+                    onMouseLeave={e => e.currentTarget.style.color = "#334155"}>×</button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* MODAL: ESTADÍSTICAS */}
+      {showStats && (
         <Modal onClose={() => setShowStats(false)} title="Estadísticas por torneo">
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 12 }}>
             {statsByTorneo.map(s => (
@@ -240,6 +282,7 @@ export default function App() {
         </Modal>
       )}
 
+      {/* MODAL: NUEVO ALUMNO */}
       {showAddRow && (
         <Modal onClose={() => setShowAddRow(false)} title="Nuevo alumno">
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
@@ -258,6 +301,7 @@ export default function App() {
         </Modal>
       )}
 
+      {/* MODAL: NUEVA COLUMNA */}
       {showAddCol && (
         <Modal onClose={() => setShowAddCol(false)} title="Nueva columna">
           <input placeholder="Nombre de la columna" value={newColName} onChange={e => setNewColName(e.target.value)}
