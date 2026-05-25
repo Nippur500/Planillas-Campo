@@ -1,8 +1,3 @@
-bash
-
-cat /home/claude/planillas-campo/src/App.jsx
-Salida
-
 import { useState, useEffect } from "react";
 import * as XLSX from "xlsx";
 
