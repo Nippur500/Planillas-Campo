@@ -22,34 +22,34 @@ const api = async (path, method = "GET", body = null) => {
 
 const fmt = (n) => n != null && n !== "" ? `$${Number(n).toLocaleString("es-AR")}` : null;
 
-const getStatus = (row, montoTotal) => {
-  const seña = Number(row.seña) || 0;
-  const saldo = Number(row.saldo) || 0;
+const getStatus = (pago, monto) => {
+  const seña = Number(pago?.seña) || 0;
+  const saldo = Number(pago?.saldo) || 0;
   const pagado = seña + saldo;
-  const monto = Number(montoTotal) || 0;
   if (seña === 0 && saldo === 0) return { color: "#ef4444", label: "Sin pagar", bg: "#1c0505" };
   if (monto > 0 && pagado >= monto) return { color: "#22c55e", label: "Al día", bg: "#052e16" };
   return { color: "#f97316", label: "Seña pagada", bg: "#1c0a00" };
 };
 
 export default function App() {
-  const [data, setData] = useState([]);
-  const [config, setConfig] = useState({});
+  const [alumnos, setAlumnos] = useState([]);
+  const [eventos, setEventos] = useState([]);
+  const [pagos, setPagos] = useState([]);
+  const [eventoActivo, setEventoActivo] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
-  const [filterTorneo, setFilterTorneo] = useState("Todos");
   const [filterStatus, setFilterStatus] = useState("Todos");
   const [search, setSearch] = useState("");
   const [showStats, setShowStats] = useState(false);
-  const [showAddRow, setShowAddRow] = useState(false);
-  const [showAddCol, setShowAddCol] = useState(false);
-  const [newColName, setNewColName] = useState("");
-  const [extraCols, setExtraCols] = useState([]);
-  const [newRow, setNewRow] = useState({});
-  const [editingCard, setEditingCard] = useState(null);
+  const [showNuevoEvento, setShowNuevoEvento] = useState(false);
+  const [showNuevoAlumno, setShowNuevoAlumno] = useState(false);
+  const [showHistorial, setShowHistorial] = useState(false);
+  const [nuevoEvento, setNuevoEvento] = useState({ nombre: "", fecha: "", monto: "" });
+  const [nuevoAlumno, setNuevoAlumno] = useState({ nombre: "", categoria: "" });
+  const [editingPago, setEditingPago] = useState(null);
   const [editData, setEditData] = useState({});
-  const [editingMonto, setEditingMonto] = useState(null);
+  const [editingMonto, setEditingMonto] = useState(false);
   const [montoTemp, setMontoTemp] = useState("");
 
   useEffect(() => { loadData(); }, []);
@@ -58,14 +58,15 @@ export default function App() {
     setLoading(true);
     setError(null);
     try {
-      const [rows, cfgs] = await Promise.all([
-        api("torneos?order=id.asc&select=*"),
-        api("torneos_config?select=*"),
+      const [als, evs, pgs] = await Promise.all([
+        api("alumnos?order=nombre.asc&select=*"),
+        api("eventos?order=created_at.desc&select=*"),
+        api("pagos?select=*"),
       ]);
-      setData(rows);
-      const cfgMap = {};
-      cfgs.forEach(c => { cfgMap[c.torneo] = c.monto; });
-      setConfig(cfgMap);
+      setAlumnos(als);
+      setEventos(evs);
+      setPagos(pgs);
+      if (evs.length > 0 && !eventoActivo) setEventoActivo(evs[0]);
     } catch (e) {
       setError("Error al cargar: " + e.message);
     } finally {
@@ -73,121 +74,112 @@ export default function App() {
     }
   };
 
-  const saveMonto = async (torneo) => {
-    const monto = Number(montoTemp) || 0;
-    setConfig(prev => ({ ...prev, [torneo]: monto }));
-    setEditingMonto(null);
-    try {
-      const existing = await api(`torneos_config?torneo=eq.${encodeURIComponent(torneo)}&select=id`);
-      if (existing.length > 0) {
-        await api(`torneos_config?torneo=eq.${encodeURIComponent(torneo)}`, "PATCH", { monto });
-      } else {
-        await api("torneos_config", "POST", { torneo, monto });
-      }
-    } catch (e) {
-      setError("Error al guardar monto");
-    }
-  };
+  const getPago = (alumnoId) => pagos.find(p => p.alumno_id === alumnoId && p.evento_id === eventoActivo?.id) || {};
 
-  const torneos = ["Todos", ...Array.from(new Set(data.map(r => r.torneo).filter(Boolean)))];
-
-  const getMonto = (torneo) => config[torneo] ?? 0;
-
-  const filtered = data
-    .filter(r => filterTorneo === "Todos" || r.torneo === filterTorneo)
-    .filter(r => {
-      if (filterStatus === "Todos") return true;
-      return getStatus(r, getMonto(r.torneo)).label === filterStatus;
-    })
-    .filter(r => !search || r.nombre?.toLowerCase().includes(search.toLowerCase()) || r.torneo?.toLowerCase().includes(search.toLowerCase()));
-
-  const saveCard = async (id) => {
+  const crearEvento = async () => {
+    if (!nuevoEvento.nombre.trim()) return;
     setSaving(true);
     try {
-      await api(`torneos?id=eq.${id}`, "PATCH", editData);
-      setData(prev => prev.map(r => r.id === id ? { ...r, ...editData } : r));
-      setEditingCard(null); setEditData({});
+      const [ev] = await api("eventos", "POST", {
+        nombre: nuevoEvento.nombre.trim(),
+        fecha: nuevoEvento.fecha,
+        monto: Number(nuevoEvento.monto) || 0,
+      });
+      // crear pagos vacíos para todos los alumnos
+      const pagosNuevos = alumnos.filter(a => a.activo).map(a => ({
+        alumno_id: a.id, evento_id: ev.id,
+        fecha_seña: "", seña: null, fecha_saldo: "", saldo: null, observacion: ""
+      }));
+      if (pagosNuevos.length > 0) {
+        const nuevos = await api("pagos", "POST", pagosNuevos);
+        setPagos(prev => [...prev, ...nuevos]);
+      }
+      setEventos(prev => [ev, ...prev]);
+      setEventoActivo(ev);
+      setNuevoEvento({ nombre: "", fecha: "", monto: "" });
+      setShowNuevoEvento(false);
+    } catch (e) { setError("Error al crear evento: " + e.message); }
+    finally { setSaving(false); }
+  };
+
+  const crearAlumno = async () => {
+    if (!nuevoAlumno.nombre.trim()) return;
+    setSaving(true);
+    try {
+      const [al] = await api("alumnos", "POST", { nombre: nuevoAlumno.nombre.trim(), categoria: nuevoAlumno.categoria });
+      setAlumnos(prev => [...prev, al].sort((a, b) => a.nombre.localeCompare(b.nombre)));
+      // crear pago vacío para el alumno en el evento activo
+      if (eventoActivo) {
+        const [pg] = await api("pagos", "POST", {
+          alumno_id: al.id, evento_id: eventoActivo.id,
+          fecha_seña: "", seña: null, fecha_saldo: "", saldo: null, observacion: ""
+        });
+        setPagos(prev => [...prev, pg]);
+      }
+      setNuevoAlumno({ nombre: "", categoria: "" });
+      setShowNuevoAlumno(false);
+    } catch (e) { setError("Error al agregar alumno: " + e.message); }
+    finally { setSaving(false); }
+  };
+
+  const savePago = async (alumnoId) => {
+    setSaving(true);
+    const pago = getPago(alumnoId);
+    try {
+      if (pago.id) {
+        await api(`pagos?id=eq.${pago.id}`, "PATCH", editData);
+        setPagos(prev => prev.map(p => p.id === pago.id ? { ...p, ...editData } : p));
+      } else {
+        const [created] = await api("pagos", "POST", {
+          alumno_id: alumnoId, evento_id: eventoActivo.id,
+          fecha_seña: "", seña: null, fecha_saldo: "", saldo: null, observacion: "", ...editData
+        });
+        setPagos(prev => [...prev, created]);
+      }
+      setEditingPago(null); setEditData({});
     } catch (e) { setError("Error al guardar"); }
     finally { setSaving(false); }
   };
 
-  const deleteRow = async (id) => {
-    if (!confirm("¿Eliminar este registro?")) return;
-    setData(prev => prev.filter(r => r.id !== id));
-    try { await api(`torneos?id=eq.${id}`, "DELETE"); }
+  const saveMonto = async () => {
+    const monto = Number(montoTemp) || 0;
+    setEventos(prev => prev.map(e => e.id === eventoActivo.id ? { ...e, monto } : e));
+    setEventoActivo(prev => ({ ...prev, monto }));
+    setEditingMonto(false);
+    try { await api(`eventos?id=eq.${eventoActivo.id}`, "PATCH", { monto }); }
+    catch (e) { setError("Error al guardar monto"); }
+  };
+
+  const deleteAlumno = async (id) => {
+    if (!confirm("¿Eliminar este alumno de todos los eventos?")) return;
+    setAlumnos(prev => prev.filter(a => a.id !== id));
+    setPagos(prev => prev.filter(p => p.alumno_id !== id));
+    try { await api(`alumnos?id=eq.${id}`, "DELETE"); }
     catch (e) { setError("Error al eliminar"); loadData(); }
   };
 
-  const addRow = async () => {
-    const row = { torneo: "", nombre: "", fecha_seña: "", seña: null, fecha_saldo: "", saldo: null, observacion: "", ...newRow };
-    setSaving(true);
-    try {
-      const [created] = await api("torneos", "POST", row);
-      setData(prev => [...prev, created]);
-      // ensure config entry exists
-      if (row.torneo && !config[row.torneo]) {
-        await api("torneos_config", "POST", { torneo: row.torneo, monto: 0 });
-        setConfig(prev => ({ ...prev, [row.torneo]: 0 }));
-      }
-      setNewRow({}); setShowAddRow(false);
-    } catch (e) { setError("Error al agregar"); }
-    finally { setSaving(false); }
-  };
+  const monto = eventoActivo?.monto || 0;
 
-  const addColumn = () => {
-    if (!newColName.trim()) return;
-    setExtraCols(prev => [...prev, newColName.trim()]);
-    setNewColName(""); setShowAddCol(false);
-  };
-
-  const exportToExcel = () => {
-    const rows = filtered.map(r => ({
-      Torneo: r.torneo, Nombre: r.nombre,
-      "Monto Total": getMonto(r.torneo),
-      "Fecha Seña": r.fecha_seña, "Seña": r.seña,
-      "Fecha Saldo": r.fecha_saldo, "Saldo": r.saldo,
-      "Total Pagado": (Number(r.seña) || 0) + (Number(r.saldo) || 0),
-      "Estado": getStatus(r, getMonto(r.torneo)).label,
-      "Observación": r.observacion,
-    }));
-    const wb = XLSX.utils.book_new();
-    const ws = XLSX.utils.json_to_sheet(rows);
-    ws["!cols"] = [18,25,12,12,12,12,12,12,14,20].map(w => ({ wch: w }));
-    XLSX.utils.book_append_sheet(wb, ws, "Torneos");
-    XLSX.writeFile(wb, "planillas_campo.xlsx");
-  };
-
-  const alDia = filtered.filter(r => getStatus(r, getMonto(r.torneo)).label === "Al día").length;
-  const conSeña = filtered.filter(r => getStatus(r, getMonto(r.torneo)).label === "Seña pagada").length;
-  const sinPagar = filtered.filter(r => getStatus(r, getMonto(r.torneo)).label === "Sin pagar").length;
-  const totalSeña = filtered.reduce((s, r) => s + (Number(r.seña) || 0), 0);
-  const totalSaldo = filtered.reduce((s, r) => s + (Number(r.saldo) || 0), 0);
-
-  const statsByTorneo = Array.from(new Set(data.map(r => r.torneo).filter(Boolean))).map(t => {
-    const rows = data.filter(r => r.torneo === t);
-    const monto = getMonto(t);
-    return {
-      torneo: t, alumnos: rows.length, monto,
-      señas: rows.reduce((s, r) => s + (Number(r.seña) || 0), 0),
-      saldos: rows.reduce((s, r) => s + (Number(r.saldo) || 0), 0),
-      alDia: rows.filter(r => getStatus(r, monto).label === "Al día").length,
-      pendientes: rows.filter(r => getStatus(r, monto).label === "Seña pagada").length,
-      sinPagar: rows.filter(r => getStatus(r, monto).label === "Sin pagar").length,
-    };
+  const filteredAlumnos = alumnos.filter(a => {
+    if (!eventoActivo) return false;
+    const pago = getPago(a.id);
+    const status = getStatus(pago, monto);
+    if (filterStatus !== "Todos" && status.label !== filterStatus) return false;
+    if (search && !a.nombre.toLowerCase().includes(search.toLowerCase()) && !a.categoria?.toLowerCase().includes(search.toLowerCase())) return false;
+    return true;
   });
+
+  const alDia = filteredAlumnos.filter(a => getStatus(getPago(a.id), monto).label === "Al día").length;
+  const conSeña = filteredAlumnos.filter(a => getStatus(getPago(a.id), monto).label === "Seña pagada").length;
+  const sinPagar = filteredAlumnos.filter(a => getStatus(getPago(a.id), monto).label === "Sin pagar").length;
+  const totalSeña = filteredAlumnos.reduce((s, a) => s + (Number(getPago(a.id).seña) || 0), 0);
+  const totalSaldo = filteredAlumnos.reduce((s, a) => s + (Number(getPago(a.id).saldo) || 0), 0);
 
   if (loading) return (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", background: "#0f172a", color: "#94a3b8", fontFamily: "system-ui", fontSize: 16 }}>
       Cargando datos...
     </div>
   );
-
-  // Group filtered by torneo
-  const torneoGroups = [];
-  const seen = [];
-  filtered.forEach(r => {
-    if (!seen.includes(r.torneo)) { seen.push(r.torneo); torneoGroups.push(r.torneo); }
-  });
 
   return (
     <div style={{ fontFamily: "'Segoe UI', system-ui, sans-serif", background: "#0f172a", minHeight: "100vh", color: "#e2e8f0" }}>
@@ -202,17 +194,44 @@ export default function App() {
           </div>
         </div>
         <div style={{ display: "flex", gap: 7, flexWrap: "wrap" }}>
+          <Btn icon="🆕" label="Nuevo Evento" onClick={() => setShowNuevoEvento(true)} color="#8b5cf6" />
+          <Btn icon="📋" label="Historial" onClick={() => setShowHistorial(true)} color="#475569" />
           <Btn icon="📊" label="Estadísticas" onClick={() => setShowStats(true)} color="#6366f1" />
-          <Btn icon="⬇" label="Excel" onClick={exportToExcel} color="#10b981" />
-          <Btn icon="+" label="Alumno" onClick={() => setShowAddRow(true)} color="#3b82f6" />
-          <Btn icon="⊞" label="Columna" onClick={() => setShowAddCol(true)} color="#475569" />
+          <Btn icon="⬇" label="Excel" onClick={() => exportToExcel(filteredAlumnos, getPago, monto, eventoActivo)} color="#10b981" />
+          <Btn icon="+" label="Alumno" onClick={() => setShowNuevoAlumno(true)} color="#3b82f6" />
           <button onClick={loadData} title="Recargar" style={{ background: "#334155", border: "none", color: "#94a3b8", borderRadius: 7, padding: "7px 10px", cursor: "pointer", fontSize: 15 }}>↻</button>
         </div>
       </div>
 
+      {/* EVENTO ACTIVO BAR */}
+      {eventoActivo && (
+        <div style={{ background: "#1a1f35", borderBottom: "1px solid #334155", padding: "8px 20px", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+          <div style={{ fontSize: 11, color: "#64748b", textTransform: "uppercase", letterSpacing: 1 }}>Evento activo:</div>
+          <div style={{ fontSize: 14, fontWeight: 700, color: "#f1f5f9" }}>{eventoActivo.nombre}</div>
+          {eventoActivo.fecha && <div style={{ fontSize: 11, color: "#64748b" }}>{eventoActivo.fecha}</div>}
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <span style={{ fontSize: 11, color: "#64748b" }}>Monto:</span>
+            {editingMonto ? (
+              <>
+                <input value={montoTemp} onChange={e => setMontoTemp(e.target.value)}
+                  onKeyDown={e => { if (e.key === "Enter") saveMonto(); if (e.key === "Escape") setEditingMonto(false); }}
+                  autoFocus style={{ background: "#0f172a", border: "1px solid #3b82f6", borderRadius: 5, padding: "2px 8px", color: "#f1f5f9", fontSize: 13, width: 100, outline: "none" }} />
+                <ActionBtn onClick={saveMonto} color="#3b82f6">✓</ActionBtn>
+                <ActionBtn onClick={() => setEditingMonto(false)} secondary>✕</ActionBtn>
+              </>
+            ) : (
+              <button onClick={() => { setEditingMonto(true); setMontoTemp(String(monto || "")); }}
+                style={{ background: monto > 0 ? "#1e293b" : "#1c0a00", border: `1px solid ${monto > 0 ? "#334155" : "#f97316"}`, borderRadius: 6, padding: "2px 10px", color: monto > 0 ? "#f1f5f9" : "#f97316", fontSize: 13, cursor: "pointer", fontWeight: 600 }}>
+                {monto > 0 ? fmt(monto) : "Definir monto ✏️"}
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* STATS BAR */}
       <div style={{ background: "#162032", borderBottom: "1px solid #1e293b", padding: "8px 20px", display: "flex", gap: 20, flexWrap: "wrap", alignItems: "center" }}>
-        <StatPill label="Total" value={filtered.length} color="#64748b" />
+        <StatPill label="Total" value={filteredAlumnos.length} color="#64748b" />
         <StatPill label="Al día" value={alDia} color="#22c55e" />
         <StatPill label="Seña pagada" value={conSeña} color="#f97316" />
         <StatPill label="Sin pagar" value={sinPagar} color="#ef4444" />
@@ -233,152 +252,174 @@ export default function App() {
       <div style={{ padding: "12px 20px", display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
         <input placeholder="🔍 Buscar..." value={search} onChange={e => setSearch(e.target.value)}
           style={{ background: "#1e293b", border: "1px solid #334155", borderRadius: 7, padding: "7px 12px", color: "#e2e8f0", fontSize: 13, outline: "none", width: 200 }} />
-        <select value={filterTorneo} onChange={e => setFilterTorneo(e.target.value)}
-          style={{ background: "#1e293b", border: "1px solid #334155", borderRadius: 7, padding: "7px 12px", color: "#e2e8f0", fontSize: 13, outline: "none" }}>
-          {torneos.map(t => <option key={t}>{t}</option>)}
-        </select>
         <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
           style={{ background: "#1e293b", border: "1px solid #334155", borderRadius: 7, padding: "7px 12px", color: "#e2e8f0", fontSize: 13, outline: "none" }}>
           {["Todos", "Al día", "Seña pagada", "Sin pagar"].map(s => <option key={s}>{s}</option>)}
         </select>
-        <span style={{ marginLeft: "auto", fontSize: 12, color: "#475569" }}>{filtered.length} alumnos</span>
+        <span style={{ marginLeft: "auto", fontSize: 12, color: "#475569" }}>{filteredAlumnos.length} alumnos</span>
       </div>
 
-      {/* CARDS BY TORNEO GROUP */}
-      <div style={{ padding: "0 20px 32px" }}>
-        {torneoGroups.map(torneo => {
-          const monto = getMonto(torneo);
-          const groupRows = filtered.filter(r => r.torneo === torneo);
+      {/* CARDS */}
+      <div style={{ padding: "0 20px 32px", display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 12 }}>
+        {filteredAlumnos.map(alumno => {
+          const pago = getPago(alumno.id);
+          const status = getStatus(pago, monto);
+          const isEditing = editingPago === alumno.id;
+          const pagado = (Number(pago.seña) || 0) + (Number(pago.saldo) || 0);
+          const progreso = monto > 0 ? Math.min((pagado / monto) * 100, 100) : 0;
           return (
-            <div key={torneo} style={{ marginBottom: 28 }}>
-              {/* Torneo header */}
-              <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12, paddingBottom: 8, borderBottom: "1px solid #1e293b" }}>
-                <div style={{ fontSize: 14, fontWeight: 700, color: "#f1f5f9", textTransform: "uppercase", letterSpacing: 2 }}>{torneo}</div>
-                <div style={{ display: "flex", alignItems: "center", gap: 6, marginLeft: "auto" }}>
-                  <span style={{ fontSize: 11, color: "#64748b" }}>Monto total:</span>
-                  {editingMonto === torneo ? (
+            <div key={alumno.id} style={{ background: "#1e293b", borderRadius: 10, overflow: "hidden", border: "1px solid #334155" }}>
+              <div style={{ height: 4, background: status.color }} />
+              <div style={{ padding: "14px 14px 10px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 4 }}>
+                  {isEditing ? (
+                    <input value={editData._nombre ?? alumno.nombre} onChange={e => setEditData(p => ({ ...p, _nombre: e.target.value }))}
+                      style={{ background: "#0f172a", border: "1px solid #3b82f6", borderRadius: 5, padding: "4px 8px", color: "#f1f5f9", fontSize: 14, fontWeight: 600, width: "70%", outline: "none" }} autoFocus />
+                  ) : (
+                    <div style={{ fontSize: 14, fontWeight: 600, color: "#f1f5f9" }}>{alumno.nombre}</div>
+                  )}
+                  <span style={{ fontSize: 10, fontWeight: 600, color: status.color, background: status.bg, padding: "2px 8px", borderRadius: 20, whiteSpace: "nowrap", marginLeft: 6 }}>{status.label}</span>
+                </div>
+
+                {alumno.categoria && !isEditing && (
+                  <div style={{ fontSize: 11, color: "#64748b", marginBottom: 8, textTransform: "uppercase", letterSpacing: 1 }}>{alumno.categoria}</div>
+                )}
+                {isEditing && (
+                  <input value={editData._categoria ?? alumno.categoria ?? ""} onChange={e => setEditData(p => ({ ...p, _categoria: e.target.value }))}
+                    placeholder="Categoría..."
+                    style={{ background: "#0f172a", border: "1px solid #334155", borderRadius: 4, padding: "3px 8px", color: "#94a3b8", fontSize: 11, width: "100%", outline: "none", boxSizing: "border-box", marginBottom: 8 }} />
+                )}
+
+                {monto > 0 && (
+                  <div style={{ marginBottom: 10 }}>
+                    <div style={{ height: 5, background: "#0f172a", borderRadius: 3, overflow: "hidden" }}>
+                      <div style={{ height: "100%", width: `${progreso}%`, background: status.color, borderRadius: 3, transition: "width 0.3s" }} />
+                    </div>
+                    <div style={{ display: "flex", justifyContent: "space-between", marginTop: 3 }}>
+                      <span style={{ fontSize: 10, color: "#475569" }}>{fmt(pagado) || "$0"} pagado</span>
+                      <span style={{ fontSize: 10, color: "#475569" }}>{fmt(monto)} total</span>
+                    </div>
+                  </div>
+                )}
+
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 10 }}>
+                  <PayField label="Seña" amount={isEditing ? editData.seña ?? pago.seña : pago.seña}
+                    date={isEditing ? editData.fecha_seña ?? pago.fecha_seña : pago.fecha_seña}
+                    editing={isEditing} onAmountChange={v => setEditData(p => ({ ...p, seña: v }))}
+                    onDateChange={v => setEditData(p => ({ ...p, fecha_seña: v }))} color="#8b5cf6" />
+                  <PayField label="Saldo" amount={isEditing ? editData.saldo ?? pago.saldo : pago.saldo}
+                    date={isEditing ? editData.fecha_saldo ?? pago.fecha_saldo : pago.fecha_saldo}
+                    editing={isEditing} onAmountChange={v => setEditData(p => ({ ...p, saldo: v }))}
+                    onDateChange={v => setEditData(p => ({ ...p, fecha_saldo: v }))} color="#10b981" />
+                </div>
+
+                <div style={{ fontSize: 12, marginBottom: 10 }}>
+                  {isEditing ? (
+                    <input value={editData.observacion ?? pago.observacion ?? ""} onChange={e => setEditData(p => ({ ...p, observacion: e.target.value }))}
+                      placeholder="Observación..."
+                      style={{ background: "#0f172a", border: "1px solid #334155", borderRadius: 4, padding: "4px 8px", color: "#94a3b8", fontSize: 12, width: "100%", outline: "none", boxSizing: "border-box" }} />
+                  ) : pago.observacion ? <span style={{ color: "#94a3b8" }}>💬 {pago.observacion}</span> : null}
+                </div>
+
+                <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
+                  {isEditing ? (
                     <>
-                      <input value={montoTemp} onChange={e => setMontoTemp(e.target.value)}
-                        onKeyDown={e => { if (e.key === "Enter") saveMonto(torneo); if (e.key === "Escape") setEditingMonto(null); }}
-                        autoFocus style={{ background: "#0f172a", border: "1px solid #3b82f6", borderRadius: 5, padding: "3px 8px", color: "#f1f5f9", fontSize: 13, width: 100, outline: "none" }} />
-                      <ActionBtn onClick={() => saveMonto(torneo)} color="#3b82f6">✓</ActionBtn>
-                      <ActionBtn onClick={() => setEditingMonto(null)} secondary>✕</ActionBtn>
+                      <ActionBtn onClick={() => { setEditingPago(null); setEditData({}); }} secondary>Cancelar</ActionBtn>
+                      <ActionBtn onClick={async () => {
+                        if (editData._nombre && editData._nombre !== alumno.nombre) {
+                          await api(`alumnos?id=eq.${alumno.id}`, "PATCH", { nombre: editData._nombre, categoria: editData._categoria ?? alumno.categoria });
+                          setAlumnos(prev => prev.map(a => a.id === alumno.id ? { ...a, nombre: editData._nombre, categoria: editData._categoria ?? alumno.categoria } : a));
+                        } else if (editData._categoria !== undefined) {
+                          await api(`alumnos?id=eq.${alumno.id}`, "PATCH", { categoria: editData._categoria });
+                          setAlumnos(prev => prev.map(a => a.id === alumno.id ? { ...a, categoria: editData._categoria } : a));
+                        }
+                        const pagoData = {};
+                        if (editData.seña !== undefined) pagoData.seña = editData.seña;
+                        if (editData.fecha_seña !== undefined) pagoData.fecha_seña = editData.fecha_seña;
+                        if (editData.saldo !== undefined) pagoData.saldo = editData.saldo;
+                        if (editData.fecha_saldo !== undefined) pagoData.fecha_saldo = editData.fecha_saldo;
+                        if (editData.observacion !== undefined) pagoData.observacion = editData.observacion;
+                        if (Object.keys(pagoData).length > 0) await savePago(alumno.id);
+                        else { setEditingPago(null); setEditData({}); }
+                      }} color="#3b82f6">Guardar</ActionBtn>
                     </>
                   ) : (
-                    <button onClick={() => { setEditingMonto(torneo); setMontoTemp(String(monto || "")); }}
-                      style={{ background: monto > 0 ? "#1e293b" : "#1c0a00", border: `1px solid ${monto > 0 ? "#334155" : "#f97316"}`, borderRadius: 6, padding: "3px 10px", color: monto > 0 ? "#f1f5f9" : "#f97316", fontSize: 13, cursor: "pointer", fontWeight: 600 }}>
-                      {monto > 0 ? fmt(monto) : "Definir monto ✏️"}
-                    </button>
+                    <>
+                      <ActionBtn onClick={() => deleteAlumno(alumno.id)} color="#ef444420" textColor="#ef4444">Eliminar</ActionBtn>
+                      <ActionBtn onClick={() => { setEditingPago(alumno.id); setEditData({}); }} color="#3b82f620" textColor="#3b82f6">Editar</ActionBtn>
+                    </>
                   )}
                 </div>
-                <span style={{ fontSize: 11, color: "#475569" }}>{groupRows.length} alumnos</span>
               </div>
-
-              {/* Cards */}
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 12 }}>
-                {groupRows.map(row => {
-                  const status = getStatus(row, monto);
-                  const isEditing = editingCard === row.id;
-                  const pagado = (Number(row.seña) || 0) + (Number(row.saldo) || 0);
-                  const progreso = monto > 0 ? Math.min((pagado / monto) * 100, 100) : 0;
-                  return (
-                    <div key={row.id} style={{ background: "#1e293b", borderRadius: 10, overflow: "hidden", border: "1px solid #334155" }}>
-                      <div style={{ height: 4, background: status.color, width: "100%" }} />
-                      <div style={{ padding: "14px 14px 10px" }}>
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
-                          {isEditing ? (
-                            <input value={editData.nombre ?? row.nombre} onChange={e => setEditData(p => ({ ...p, nombre: e.target.value }))}
-                              style={{ background: "#0f172a", border: "1px solid #3b82f6", borderRadius: 5, padding: "4px 8px", color: "#f1f5f9", fontSize: 14, fontWeight: 600, width: "70%", outline: "none" }} autoFocus />
-                          ) : (
-                            <div style={{ fontSize: 14, fontWeight: 600, color: "#f1f5f9" }}>{row.nombre}</div>
-                          )}
-                          <span style={{ fontSize: 10, fontWeight: 600, color: status.color, background: status.bg, padding: "2px 8px", borderRadius: 20, whiteSpace: "nowrap", marginLeft: 6 }}>{status.label}</span>
-                        </div>
-
-                        {/* Progress bar */}
-                        {monto > 0 && (
-                          <div style={{ marginBottom: 10 }}>
-                            <div style={{ height: 5, background: "#0f172a", borderRadius: 3, overflow: "hidden" }}>
-                              <div style={{ height: "100%", width: `${progreso}%`, background: status.color, borderRadius: 3, transition: "width 0.3s" }} />
-                            </div>
-                            <div style={{ display: "flex", justifyContent: "space-between", marginTop: 3 }}>
-                              <span style={{ fontSize: 10, color: "#475569" }}>{fmt(pagado)} pagado</span>
-                              <span style={{ fontSize: 10, color: "#475569" }}>{fmt(monto)} total</span>
-                            </div>
-                          </div>
-                        )}
-
-                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 10 }}>
-                          <PayField label="Seña" amount={isEditing ? editData.seña ?? row.seña : row.seña} date={isEditing ? editData.fecha_seña ?? row.fecha_seña : row.fecha_seña}
-                            editing={isEditing} onAmountChange={v => setEditData(p => ({ ...p, seña: v }))} onDateChange={v => setEditData(p => ({ ...p, fecha_seña: v }))} color="#8b5cf6" />
-                          <PayField label="Saldo" amount={isEditing ? editData.saldo ?? row.saldo : row.saldo} date={isEditing ? editData.fecha_saldo ?? row.fecha_saldo : row.fecha_saldo}
-                            editing={isEditing} onAmountChange={v => setEditData(p => ({ ...p, saldo: v }))} onDateChange={v => setEditData(p => ({ ...p, fecha_saldo: v }))} color="#10b981" />
-                        </div>
-
-                        {isEditing && (
-                          <div style={{ marginBottom: 10 }}>
-                            <label style={{ display: "block", fontSize: 10, color: "#64748b", marginBottom: 3, textTransform: "uppercase", letterSpacing: 1 }}>Torneo</label>
-                            <input value={editData.torneo ?? row.torneo} onChange={e => setEditData(p => ({ ...p, torneo: e.target.value }))}
-                              style={{ background: "#0f172a", border: "1px solid #334155", borderRadius: 4, padding: "4px 8px", color: "#94a3b8", fontSize: 12, width: "100%", outline: "none", boxSizing: "border-box" }} />
-                          </div>
-                        )}
-
-                        <div style={{ fontSize: 12, marginBottom: 10 }}>
-                          {isEditing ? (
-                            <input value={editData.observacion ?? row.observacion} onChange={e => setEditData(p => ({ ...p, observacion: e.target.value }))}
-                              placeholder="Observación..."
-                              style={{ background: "#0f172a", border: "1px solid #334155", borderRadius: 4, padding: "4px 8px", color: "#94a3b8", fontSize: 12, width: "100%", outline: "none", boxSizing: "border-box" }} />
-                          ) : row.observacion ? <span style={{ color: "#94a3b8" }}>💬 {row.observacion}</span> : null}
-                        </div>
-
-                        {extraCols.map(col => (
-                          <div key={col} style={{ fontSize: 12, color: "#64748b", marginBottom: 6 }}>
-                            <span style={{ textTransform: "uppercase", letterSpacing: 1, fontSize: 10 }}>{col}: </span>
-                            {isEditing ? (
-                              <input value={editData[col] ?? row[col] ?? ""} onChange={e => setEditData(p => ({ ...p, [col]: e.target.value }))}
-                                style={{ background: "#0f172a", border: "1px solid #334155", borderRadius: 4, padding: "2px 6px", color: "#94a3b8", fontSize: 12, outline: "none" }} />
-                            ) : <span style={{ color: "#94a3b8" }}>{row[col] || "—"}</span>}
-                          </div>
-                        ))}
-
-                        <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
-                          {isEditing ? (
-                            <>
-                              <ActionBtn onClick={() => { setEditingCard(null); setEditData({}); }} secondary>Cancelar</ActionBtn>
-                              <ActionBtn onClick={() => saveCard(row.id)} color="#3b82f6">Guardar</ActionBtn>
-                            </>
-                          ) : (
-                            <>
-                              <ActionBtn onClick={() => deleteRow(row.id)} color="#ef444420" textColor="#ef4444">Eliminar</ActionBtn>
-                              <ActionBtn onClick={() => { setEditingCard(row.id); setEditData({}); }} color="#3b82f620" textColor="#3b82f6">Editar</ActionBtn>
-                            </>
-                          )}
-                        </div>
-                      </div>
-                      <div style={{ height: 5, background: status.color, width: "100%", opacity: 0.6 }} />
-                    </div>
-                  );
-                })}
-              </div>
+              <div style={{ height: 5, background: status.color, opacity: 0.6 }} />
             </div>
           );
         })}
       </div>
 
+      {/* MODAL NUEVO EVENTO */}
+      {showNuevoEvento && (
+        <Modal onClose={() => setShowNuevoEvento(false)} title="🆕 Nuevo Evento">
+          <p style={{ fontSize: 12, color: "#64748b", margin: "0 0 14px" }}>Se crearán pagos en blanco para todos los alumnos actuales. Los datos del evento anterior quedan guardados.</p>
+          {[{k:"nombre",l:"Nombre del evento"},{k:"fecha",l:"Fecha"},{k:"monto",l:"Monto total ($)"}].map(f => (
+            <div key={f.k} style={{ marginBottom: 10 }}>
+              <label style={{ display: "block", fontSize: 10, color: "#64748b", marginBottom: 3, textTransform: "uppercase", letterSpacing: 1 }}>{f.l}</label>
+              <input value={nuevoEvento[f.k]} onChange={e => setNuevoEvento(p => ({ ...p, [f.k]: e.target.value }))}
+                style={{ width: "100%", background: "#0f172a", border: "1px solid #334155", borderRadius: 6, padding: "8px 10px", color: "#e2e8f0", fontSize: 13, outline: "none", boxSizing: "border-box" }} />
+            </div>
+          ))}
+          <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 14 }}>
+            <ActionBtn onClick={() => setShowNuevoEvento(false)} secondary>Cancelar</ActionBtn>
+            <ActionBtn onClick={crearEvento} color="#8b5cf6">Crear Evento</ActionBtn>
+          </div>
+        </Modal>
+      )}
+
+      {/* MODAL HISTORIAL */}
+      {showHistorial && (
+        <Modal onClose={() => setShowHistorial(false)} title="📋 Historial de Eventos">
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {eventos.map(ev => (
+              <div key={ev.id} onClick={() => { setEventoActivo(ev); setShowHistorial(false); }}
+                style={{ background: ev.id === eventoActivo?.id ? "#1a2744" : "#0f172a", border: `1px solid ${ev.id === eventoActivo?.id ? "#3b82f6" : "#334155"}`, borderRadius: 8, padding: "12px 14px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <div>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: "#f1f5f9" }}>{ev.nombre}</div>
+                  <div style={{ fontSize: 11, color: "#64748b" }}>{ev.fecha || "Sin fecha"} · {fmt(ev.monto) || "Sin monto"}</div>
+                </div>
+                {ev.id === eventoActivo?.id && <span style={{ fontSize: 11, color: "#3b82f6", fontWeight: 600 }}>ACTIVO</span>}
+              </div>
+            ))}
+          </div>
+        </Modal>
+      )}
+
+      {/* MODAL NUEVO ALUMNO */}
+      {showNuevoAlumno && (
+        <Modal onClose={() => setShowNuevoAlumno(false)} title="Nuevo Alumno">
+          {[{k:"nombre",l:"Nombre y Apellido"},{k:"categoria",l:"Categoría"}].map(f => (
+            <div key={f.k} style={{ marginBottom: 10 }}>
+              <label style={{ display: "block", fontSize: 10, color: "#64748b", marginBottom: 3, textTransform: "uppercase", letterSpacing: 1 }}>{f.l}</label>
+              <input value={nuevoAlumno[f.k]} onChange={e => setNuevoAlumno(p => ({ ...p, [f.k]: e.target.value }))}
+                style={{ width: "100%", background: "#0f172a", border: "1px solid #334155", borderRadius: 6, padding: "8px 10px", color: "#e2e8f0", fontSize: 13, outline: "none", boxSizing: "border-box" }} />
+            </div>
+          ))}
+          <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 14 }}>
+            <ActionBtn onClick={() => setShowNuevoAlumno(false)} secondary>Cancelar</ActionBtn>
+            <ActionBtn onClick={crearAlumno} color="#3b82f6">Guardar</ActionBtn>
+          </div>
+        </Modal>
+      )}
+
       {/* MODAL ESTADÍSTICAS */}
       {showStats && (
-        <Modal onClose={() => setShowStats(false)} title="Estadísticas por torneo">
-
-          {/* PIE CHART */}
+        <Modal onClose={() => setShowStats(false)} title="Estadísticas">
           {(() => {
-            const total = data.length;
-            const verde = data.filter(r => getStatus(r, getMonto(r.torneo)).label === "Al día").length;
-            const naranja = data.filter(r => getStatus(r, getMonto(r.torneo)).label === "Seña pagada").length;
-            const rojo = data.filter(r => getStatus(r, getMonto(r.torneo)).label === "Sin pagar").length;
+            const total = filteredAlumnos.length;
+            if (total === 0) return <div style={{ color: "#64748b", fontSize: 13 }}>Sin datos para mostrar.</div>;
             const slices = [
-              { label: "Al día", value: verde, color: "#22c55e" },
-              { label: "Seña pagada", value: naranja, color: "#f97316" },
-              { label: "Sin pagar", value: rojo, color: "#ef4444" },
+              { label: "Al día", value: alDia, color: "#22c55e" },
+              { label: "Seña pagada", value: conSeña, color: "#f97316" },
+              { label: "Sin pagar", value: sinPagar, color: "#ef4444" },
             ].filter(s => s.value > 0);
             const size = 160;
             const cx = size / 2, cy = size / 2, r = size / 2 - 10;
@@ -386,112 +427,82 @@ export default function App() {
             const paths = slices.map(s => {
               const angle = (s.value / total) * 2 * Math.PI;
               const endAngle = startAngle + angle;
-              const x1 = cx + r * Math.cos(startAngle);
-              const y1 = cy + r * Math.sin(startAngle);
-              const x2 = cx + r * Math.cos(endAngle);
-              const y2 = cy + r * Math.sin(endAngle);
+              const x1 = cx + r * Math.cos(startAngle), y1 = cy + r * Math.sin(startAngle);
+              const x2 = cx + r * Math.cos(endAngle), y2 = cy + r * Math.sin(endAngle);
               const largeArc = angle > Math.PI ? 1 : 0;
               const d = `M ${cx} ${cy} L ${x1} ${y1} A ${r} ${r} 0 ${largeArc} 1 ${x2} ${y2} Z`;
               const mid = startAngle + angle / 2;
-              const lx = cx + (r * 0.65) * Math.cos(mid);
-              const ly = cy + (r * 0.65) * Math.sin(mid);
+              const lx = cx + r * 0.65 * Math.cos(mid), ly = cy + r * 0.65 * Math.sin(mid);
               startAngle = endAngle;
               return { ...s, d, lx, ly, pct: Math.round((s.value / total) * 100) };
             });
             return (
-              <div style={{ display: "flex", alignItems: "center", gap: 24, marginBottom: 18, background: "#0f172a", borderRadius: 10, padding: 16 }}>
-                <svg width={size} height={size} style={{ flexShrink: 0 }}>
-                  {paths.map((p, i) => (
-                    <g key={i}>
-                      <path d={p.d} fill={p.color} stroke="#0f172a" strokeWidth={2} />
-                      {p.pct > 8 && <text x={p.lx} y={p.ly} textAnchor="middle" dominantBaseline="middle" fill="#fff" fontSize={11} fontWeight={700}>{p.pct}%</text>}
-                    </g>
-                  ))}
-                </svg>
-                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                  {slices.map(s => (
-                    <div key={s.label} style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      <div style={{ width: 12, height: 12, borderRadius: 3, background: s.color, flexShrink: 0 }} />
-                      <div>
-                        <div style={{ fontSize: 12, color: "#f1f5f9", fontWeight: 600 }}>{s.label}</div>
-                        <div style={{ fontSize: 11, color: "#64748b" }}>{s.value} alumnos ({Math.round((s.value / total) * 100)}%)</div>
+              <>
+                <div style={{ display: "flex", alignItems: "center", gap: 24, marginBottom: 18, background: "#0f172a", borderRadius: 10, padding: 16 }}>
+                  <svg width={size} height={size} style={{ flexShrink: 0 }}>
+                    {paths.map((p, i) => (
+                      <g key={i}>
+                        <path d={p.d} fill={p.color} stroke="#0f172a" strokeWidth={2} />
+                        {p.pct > 8 && <text x={p.lx} y={p.ly} textAnchor="middle" dominantBaseline="middle" fill="#fff" fontSize={11} fontWeight={700}>{p.pct}%</text>}
+                      </g>
+                    ))}
+                  </svg>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                    {slices.map(s => (
+                      <div key={s.label} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <div style={{ width: 12, height: 12, borderRadius: 3, background: s.color }} />
+                        <div>
+                          <div style={{ fontSize: 12, color: "#f1f5f9", fontWeight: 600 }}>{s.label}</div>
+                          <div style={{ fontSize: 11, color: "#64748b" }}>{s.value} alumnos ({Math.round((s.value / total) * 100)}%)</div>
+                        </div>
                       </div>
+                    ))}
+                    <div style={{ paddingTop: 8, borderTop: "1px solid #1e293b" }}>
+                      <div style={{ fontSize: 11, color: "#64748b" }}>Total: <span style={{ color: "#f1f5f9", fontWeight: 600 }}>{total} alumnos</span></div>
                     </div>
-                  ))}
-                  <div style={{ marginTop: 4, paddingTop: 8, borderTop: "1px solid #1e293b" }}>
-                    <div style={{ fontSize: 11, color: "#64748b" }}>Total: <span style={{ color: "#f1f5f9", fontWeight: 600 }}>{total} alumnos</span></div>
                   </div>
                 </div>
-              </div>
+                <div style={{ background: "#0f172a", borderRadius: 8, border: "1px solid #f59e0b40", padding: 14 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: "#f59e0b", marginBottom: 10 }}>Resumen financiero — {eventoActivo?.nombre}</div>
+                  <SRow label="Monto por alumno" val={fmt(monto) || "Sin definir"} color="#f59e0b" />
+                  <SRow label="Total señas cobradas" val={fmt(totalSeña)} color="#8b5cf6" />
+                  <SRow label="Total saldos cobrados" val={fmt(totalSaldo)} color="#10b981" />
+                  <SRow label="Total recaudado" val={fmt(totalSeña + totalSaldo)} color="#f59e0b" />
+                  {monto > 0 && <SRow label="Total esperado" val={fmt(monto * filteredAlumnos.length)} color="#64748b" />}
+                </div>
+              </>
             );
           })()}
-
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 10, marginBottom: 14 }}>
-            {statsByTorneo.map(s => (
-              <div key={s.torneo} style={{ background: "#0f172a", border: "1px solid #334155", borderRadius: 8, padding: 14 }}>
-                <div style={{ fontSize: 13, fontWeight: 600, color: "#f1f5f9", marginBottom: 10 }}>{s.torneo}</div>
-                <SRow label="Monto total" val={fmt(s.monto) || "Sin definir"} color="#f59e0b" />
-                <SRow label="Alumnos" val={s.alumnos} />
-                <SRow label="Al día" val={s.alDia} color="#22c55e" />
-                <SRow label="Seña pagada" val={s.pendientes} color="#f97316" />
-                <SRow label="Sin pagar" val={s.sinPagar} color="#ef4444" />
-                <SRow label="Total señas" val={fmt(s.señas)} color="#8b5cf6" />
-                <SRow label="Total saldos" val={fmt(s.saldos)} color="#10b981" />
-                <SRow label="Recaudado" val={fmt(s.señas + s.saldos)} color="#f59e0b" />
-                {s.monto > 0 && <SRow label="Esperado" val={fmt(s.monto * s.alumnos)} color="#64748b" />}
-              </div>
-            ))}
-          </div>
-          <div style={{ background: "#0f172a", border: "1px solid #f59e0b40", borderRadius: 8, padding: 14 }}>
-            <div style={{ fontSize: 13, fontWeight: 600, color: "#f59e0b", marginBottom: 10 }}>Total general</div>
-            <SRow label="Alumnos" val={data.length} />
-            <SRow label="Al día" val={data.filter(r => getStatus(r, getMonto(r.torneo)).label === "Al día").length} color="#22c55e" />
-            <SRow label="Seña pagada" val={data.filter(r => getStatus(r, getMonto(r.torneo)).label === "Seña pagada").length} color="#f97316" />
-            <SRow label="Sin pagar" val={data.filter(r => getStatus(r, getMonto(r.torneo)).label === "Sin pagar").length} color="#ef4444" />
-            <SRow label="Total recaudado" val={fmt(data.reduce((s, r) => s + (Number(r.seña) || 0) + (Number(r.saldo) || 0), 0))} color="#f59e0b" />
-          </div>
-        </Modal>
-      )}
-
-      {/* MODAL NUEVO ALUMNO */}
-      {showAddRow && (
-        <Modal onClose={() => setShowAddRow(false)} title="Nuevo alumno">
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-            {[{k:"nombre",l:"Nombre y Apellido",full:true},{k:"torneo",l:"Torneo"},{k:"fecha_seña",l:"Fecha Seña"},{k:"seña",l:"Seña $"},{k:"fecha_saldo",l:"Fecha Saldo"},{k:"saldo",l:"Saldo $"},{k:"observacion",l:"Observación",full:true}].map(f => (
-              <div key={f.k} style={{ gridColumn: f.full ? "1 / -1" : "auto" }}>
-                <label style={{ display: "block", fontSize: 10, color: "#64748b", marginBottom: 3, textTransform: "uppercase", letterSpacing: 1 }}>{f.l}</label>
-                <input value={newRow[f.k] ?? ""} onChange={e => setNewRow(p => ({ ...p, [f.k]: e.target.value }))}
-                  style={{ width: "100%", background: "#0f172a", border: "1px solid #334155", borderRadius: 6, padding: "7px 10px", color: "#e2e8f0", fontSize: 13, outline: "none", boxSizing: "border-box" }} />
-              </div>
-            ))}
-          </div>
-          <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 14 }}>
-            <ActionBtn onClick={() => setShowAddRow(false)} secondary>Cancelar</ActionBtn>
-            <ActionBtn onClick={addRow} color="#3b82f6">Guardar</ActionBtn>
-          </div>
-        </Modal>
-      )}
-
-      {/* MODAL NUEVA COLUMNA */}
-      {showAddCol && (
-        <Modal onClose={() => setShowAddCol(false)} title="Nueva columna">
-          <input placeholder="Nombre de la columna" value={newColName} onChange={e => setNewColName(e.target.value)}
-            onKeyDown={e => e.key === "Enter" && addColumn()} autoFocus
-            style={{ width: "100%", background: "#0f172a", border: "1px solid #334155", borderRadius: 6, padding: "8px 10px", color: "#e2e8f0", fontSize: 13, outline: "none", boxSizing: "border-box", marginBottom: 12 }} />
-          <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-            <ActionBtn onClick={() => setShowAddCol(false)} secondary>Cancelar</ActionBtn>
-            <ActionBtn onClick={addColumn} color="#3b82f6">Agregar</ActionBtn>
-          </div>
         </Modal>
       )}
     </div>
   );
 }
 
+function exportToExcel(alumnos, getPago, monto, evento) {
+  const rows = alumnos.map(a => {
+    const p = getPago(a.id);
+    const pagado = (Number(p.seña) || 0) + (Number(p.saldo) || 0);
+    const status = getStatus(p, monto);
+    return {
+      Nombre: a.nombre, Categoría: a.categoria || "",
+      "Fecha Seña": p.fecha_seña || "", Seña: p.seña || "",
+      "Fecha Saldo": p.fecha_saldo || "", Saldo: p.saldo || "",
+      "Total Pagado": pagado, "Monto Total": monto,
+      Estado: status.label, Observación: p.observacion || "",
+    };
+  });
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.json_to_sheet(rows);
+  ws["!cols"] = [25,15,12,12,12,12,12,12,14,20].map(w => ({ wch: w }));
+  XLSX.utils.book_append_sheet(wb, ws, evento?.nombre || "Evento");
+  XLSX.writeFile(wb, `${evento?.nombre || "planillas"}.xlsx`);
+}
+
 function PayField({ label, amount, date, editing, onAmountChange, onDateChange, color }) {
   return (
     <div style={{ background: "#0f172a", borderRadius: 7, padding: "8px 10px", border: "1px solid #1e293b" }}>
-      <div style={{ fontSize: 10, color: color, fontWeight: 600, textTransform: "uppercase", letterSpacing: 1, marginBottom: 4 }}>{label}</div>
+      <div style={{ fontSize: 10, color, fontWeight: 600, textTransform: "uppercase", letterSpacing: 1, marginBottom: 4 }}>{label}</div>
       {editing ? (
         <>
           <input value={amount ?? ""} onChange={e => onAmountChange(e.target.value === "" ? null : Number(e.target.value))} placeholder="Monto"
