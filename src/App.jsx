@@ -559,7 +559,3 @@ function SRow({ label, val, color }) {
     </div>
   );
 }
-Listo
-Copiá todo ese contenido → VSCode web → src/App.jsx → Ctrl+A → borrá → pegá → Commit & Push. Avisame cuando esté listo.
-
-
