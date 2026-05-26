@@ -368,6 +368,64 @@ export default function App() {
       {/* MODAL ESTADÍSTICAS */}
       {showStats && (
         <Modal onClose={() => setShowStats(false)} title="Estadísticas por torneo">
+
+          {/* PIE CHART */}
+          {(() => {
+            const total = data.length;
+            const verde = data.filter(r => getStatus(r, getMonto(r.torneo)).label === "Al día").length;
+            const naranja = data.filter(r => getStatus(r, getMonto(r.torneo)).label === "Seña pagada").length;
+            const rojo = data.filter(r => getStatus(r, getMonto(r.torneo)).label === "Sin pagar").length;
+            const slices = [
+              { label: "Al día", value: verde, color: "#22c55e" },
+              { label: "Seña pagada", value: naranja, color: "#f97316" },
+              { label: "Sin pagar", value: rojo, color: "#ef4444" },
+            ].filter(s => s.value > 0);
+            const size = 160;
+            const cx = size / 2, cy = size / 2, r = size / 2 - 10;
+            let startAngle = -Math.PI / 2;
+            const paths = slices.map(s => {
+              const angle = (s.value / total) * 2 * Math.PI;
+              const endAngle = startAngle + angle;
+              const x1 = cx + r * Math.cos(startAngle);
+              const y1 = cy + r * Math.sin(startAngle);
+              const x2 = cx + r * Math.cos(endAngle);
+              const y2 = cy + r * Math.sin(endAngle);
+              const largeArc = angle > Math.PI ? 1 : 0;
+              const d = `M ${cx} ${cy} L ${x1} ${y1} A ${r} ${r} 0 ${largeArc} 1 ${x2} ${y2} Z`;
+              const mid = startAngle + angle / 2;
+              const lx = cx + (r * 0.65) * Math.cos(mid);
+              const ly = cy + (r * 0.65) * Math.sin(mid);
+              startAngle = endAngle;
+              return { ...s, d, lx, ly, pct: Math.round((s.value / total) * 100) };
+            });
+            return (
+              <div style={{ display: "flex", alignItems: "center", gap: 24, marginBottom: 18, background: "#0f172a", borderRadius: 10, padding: 16 }}>
+                <svg width={size} height={size} style={{ flexShrink: 0 }}>
+                  {paths.map((p, i) => (
+                    <g key={i}>
+                      <path d={p.d} fill={p.color} stroke="#0f172a" strokeWidth={2} />
+                      {p.pct > 8 && <text x={p.lx} y={p.ly} textAnchor="middle" dominantBaseline="middle" fill="#fff" fontSize={11} fontWeight={700}>{p.pct}%</text>}
+                    </g>
+                  ))}
+                </svg>
+                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  {slices.map(s => (
+                    <div key={s.label} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <div style={{ width: 12, height: 12, borderRadius: 3, background: s.color, flexShrink: 0 }} />
+                      <div>
+                        <div style={{ fontSize: 12, color: "#f1f5f9", fontWeight: 600 }}>{s.label}</div>
+                        <div style={{ fontSize: 11, color: "#64748b" }}>{s.value} alumnos ({Math.round((s.value / total) * 100)}%)</div>
+                      </div>
+                    </div>
+                  ))}
+                  <div style={{ marginTop: 4, paddingTop: 8, borderTop: "1px solid #1e293b" }}>
+                    <div style={{ fontSize: 11, color: "#64748b" }}>Total: <span style={{ color: "#f1f5f9", fontWeight: 600 }}>{total} alumnos</span></div>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 10, marginBottom: 14 }}>
             {statsByTorneo.map(s => (
               <div key={s.torneo} style={{ background: "#0f172a", border: "1px solid #334155", borderRadius: 8, padding: 14 }}>
@@ -501,3 +559,7 @@ function SRow({ label, val, color }) {
     </div>
   );
 }
+Listo
+Copiá todo ese contenido → VSCode web → src/App.jsx → Ctrl+A → borrá → pegá → Commit & Push. Avisame cuando esté listo.
+
+
