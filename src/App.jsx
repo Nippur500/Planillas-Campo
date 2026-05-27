@@ -395,13 +395,31 @@ export default function App() {
                     onDateChange={v => setEditData(p => ({ ...p, fecha_saldo: v }))} color="#10b981" />
                 </div>
 
-                <div style={{ fontSize: 12, marginBottom: 10 }}>
-                  {isEditing ? (
+                {!isEditing && pago.observacion ? <div style={{ fontSize: 12, marginBottom: 10 }}><span style={{ color: "#94a3b8" }}>💬 {pago.observacion}</span></div> : null}
+                {isEditing && (
+                  <div style={{ fontSize: 12, marginBottom: 10 }}>
                     <input value={editData.observacion ?? pago.observacion ?? ""} onChange={e => setEditData(p => ({ ...p, observacion: e.target.value }))}
                       placeholder="Observación..."
                       style={{ background: "#0f172a", border: "1px solid #334155", borderRadius: 4, padding: "4px 8px", color: "#94a3b8", fontSize: 12, width: "100%", outline: "none", boxSizing: "border-box" }} />
-                  ) : pago.observacion ? <span style={{ color: "#94a3b8" }}>💬 {pago.observacion}</span> : null}
-                </div>
+                  </div>
+                )}
+
+                {/* WHATSAPP BUTTON - solo si tiene deuda y tiene teléfono */}
+                {!isEditing && status.label !== "Al día" && alumno.telefono && (() => {
+                  const pagado = (Number(pago.seña) || 0) + (Number(pago.saldo) || 0);
+                  const debe = monto > 0 ? monto - pagado : null;
+                  const responsable = alumno.responsable ? `Hola ${alumno.responsable}!` : "Hola!";
+                  const montoMsg = debe && debe > 0 ? ` Saldo pendiente: $${Number(debe).toLocaleString("es-AR")}.` : monto > 0 ? ` Monto total: $${Number(monto).toLocaleString("es-AR")}.` : "";
+                  const cierreMsg = eventoActivo?.fecha_cierre ? ` Fecha límite: ${eventoActivo.fecha_cierre}.` : "";
+                  const msg = `${responsable} Te recordamos que ${alumno.nombre} tiene pendiente el pago del torneo ${eventoActivo?.nombre || ""}.${montoMsg}${cierreMsg} Gracias!`;
+                  const url = `https://wa.me/${alumno.telefono.replace(/\D/g, "")}?text=${encodeURIComponent(msg)}`;
+                  return (
+                    <a href={url} target="_blank" rel="noreferrer"
+                      style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, background: "#052e16", border: "1px solid #22c55e", borderRadius: 7, padding: "7px 12px", color: "#22c55e", textDecoration: "none", fontSize: 12, fontWeight: 600, marginBottom: 10 }}>
+                      📲 Enviar recordatorio por WhatsApp
+                    </a>
+                  );
+                })()}
 
                 <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
                   {isEditing ? (
