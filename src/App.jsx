@@ -173,6 +173,24 @@ export default function App() {
     catch (e) { setError("Error al guardar notas"); }
   };
 
+  const deleteEvento = async (ev, e) => {
+    e.stopPropagation();
+    if (!confirm(`¿Eliminar el evento "${ev.nombre}"? Se borrarán todos los pagos asociados.`)) return;
+    setSaving(true);
+    try {
+      await api(`pagos?evento_id=eq.${ev.id}`, "DELETE");
+      await api(`eventos?id=eq.${ev.id}`, "DELETE");
+      setEventos(prev => prev.filter(x => x.id !== ev.id));
+      setPagos(prev => prev.filter(p => p.evento_id !== ev.id));
+      if (eventoActivo?.id === ev.id) {
+        const remaining = eventos.filter(x => x.id !== ev.id);
+        setEventoActivo(remaining.length > 0 ? remaining[0] : null);
+      }
+      setShowHistorial(false);
+    } catch (e) { setError("Error al eliminar evento"); }
+    finally { setSaving(false); }
+  };
+
   const deleteAlumno = async (id) => {
     if (!confirm("¿Eliminar este alumno de todos los eventos?")) return;
     setAlumnos(prev => prev.filter(a => a.id !== id));
@@ -648,7 +666,15 @@ export default function App() {
                   <div style={{ fontSize: 11, color: "#64748b" }}>{ev.fecha || "Sin fecha"} · {fmt(ev.monto) || "Sin monto"}</div>
                   {ev.notas && <div style={{ fontSize: 11, color: "#475569", marginTop: 3 }}>📝 {ev.notas}</div>}
                 </div>
-                {ev.id === eventoActivo?.id && <span style={{ fontSize: 11, color: "#3b82f6", fontWeight: 600 }}>ACTIVO</span>}
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  {ev.id === eventoActivo?.id && <span style={{ fontSize: 11, color: "#3b82f6", fontWeight: 600 }}>ACTIVO</span>}
+                  <button onClick={(e) => deleteEvento(ev, e)}
+                    style={{ background: "none", border: "1px solid #334155", borderRadius: 5, color: "#64748b", cursor: "pointer", fontSize: 12, padding: "3px 8px" }}
+                    onMouseEnter={e => { e.currentTarget.style.borderColor = "#ef4444"; e.currentTarget.style.color = "#ef4444"; }}
+                    onMouseLeave={e => { e.currentTarget.style.borderColor = "#334155"; e.currentTarget.style.color = "#64748b"; }}>
+                    Eliminar
+                  </button>
+                </div>
               </div>
             ))}
           </div>
