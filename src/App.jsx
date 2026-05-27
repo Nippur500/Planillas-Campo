@@ -46,7 +46,7 @@ export default function App() {
   const [showNuevoAlumno, setShowNuevoAlumno] = useState(false);
   const [showHistorial, setShowHistorial] = useState(false);
   const [nuevoEvento, setNuevoEvento] = useState({ nombre: "", fecha: "", monto: "" });
-  const [nuevoAlumno, setNuevoAlumno] = useState({ nombre: "", categoria: "" });
+  const [nuevoAlumno, setNuevoAlumno] = useState({ nombre: "", categoria: "", responsable: "", telefono: "" });
   const [editingPago, setEditingPago] = useState(null);
   const [editData, setEditData] = useState({});
   const [editingMonto, setEditingMonto] = useState(false);
@@ -106,7 +106,7 @@ export default function App() {
     if (!nuevoAlumno.nombre.trim()) return;
     setSaving(true);
     try {
-      const [al] = await api("alumnos", "POST", { nombre: nuevoAlumno.nombre.trim(), categoria: nuevoAlumno.categoria });
+      const [al] = await api("alumnos", "POST", { nombre: nuevoAlumno.nombre.trim(), categoria: nuevoAlumno.categoria, responsable: nuevoAlumno.responsable || "", telefono: nuevoAlumno.telefono || "" });
       setAlumnos(prev => [...prev, al].sort((a, b) => a.nombre.localeCompare(b.nombre)));
       // crear pago vacío para el alumno en el evento activo
       if (eventoActivo) {
@@ -281,13 +281,29 @@ export default function App() {
                   <span style={{ fontSize: 10, fontWeight: 600, color: status.color, background: status.bg, padding: "2px 8px", borderRadius: 20, whiteSpace: "nowrap", marginLeft: 6 }}>{status.label}</span>
                 </div>
 
-                {alumno.categoria && !isEditing && (
-                  <div style={{ fontSize: 11, color: "#64748b", marginBottom: 8, textTransform: "uppercase", letterSpacing: 1 }}>{alumno.categoria}</div>
+                {!isEditing && (alumno.categoria || alumno.responsable || alumno.telefono) && (
+                  <div style={{ marginBottom: 8, display: "flex", flexDirection: "column", gap: 3 }}>
+                    {alumno.categoria && <div style={{ fontSize: 11, color: "#64748b", textTransform: "uppercase", letterSpacing: 1 }}>{alumno.categoria}</div>}
+                    {alumno.responsable && <div style={{ fontSize: 12, color: "#94a3b8" }}>👤 {alumno.responsable}</div>}
+                    {alumno.telefono && (
+                      <div style={{ display: "flex", gap: 6 }}>
+                        <a href={`tel:${alumno.telefono}`} style={{ fontSize: 12, color: "#3b82f6", textDecoration: "none" }}>📞 {alumno.telefono}</a>
+                        <a href={`https://wa.me/${alumno.telefono.replace(/\D/g, "")}`} target="_blank" rel="noreferrer"
+                          style={{ fontSize: 12, color: "#22c55e", textDecoration: "none" }}>💬 WhatsApp</a>
+                      </div>
+                    )}
+                  </div>
                 )}
                 {isEditing && (
-                  <input value={editData._categoria ?? alumno.categoria ?? ""} onChange={e => setEditData(p => ({ ...p, _categoria: e.target.value }))}
-                    placeholder="Categoría..."
-                    style={{ background: "#0f172a", border: "1px solid #334155", borderRadius: 4, padding: "3px 8px", color: "#94a3b8", fontSize: 11, width: "100%", outline: "none", boxSizing: "border-box", marginBottom: 8 }} />
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginBottom: 8 }}>
+                    {[{k:"_categoria",l:"Categoría",v:alumno.categoria},{k:"_responsable",l:"Responsable",v:alumno.responsable},{k:"_telefono",l:"Teléfono/WhatsApp",v:alumno.telefono}].map(f => (
+                      <div key={f.k} style={{ gridColumn: f.k === "_categoria" ? "1 / -1" : "auto" }}>
+                        <label style={{ display: "block", fontSize: 9, color: "#64748b", marginBottom: 2, textTransform: "uppercase", letterSpacing: 1 }}>{f.l}</label>
+                        <input value={editData[f.k] ?? f.v ?? ""} onChange={e => setEditData(p => ({ ...p, [f.k]: e.target.value }))}
+                          style={{ background: "#0f172a", border: "1px solid #334155", borderRadius: 4, padding: "3px 8px", color: "#94a3b8", fontSize: 12, width: "100%", outline: "none", boxSizing: "border-box" }} />
+                      </div>
+                    ))}
+                  </div>
                 )}
 
                 {monto > 0 && (
@@ -326,12 +342,14 @@ export default function App() {
                     <>
                       <ActionBtn onClick={() => { setEditingPago(null); setEditData({}); }} secondary>Cancelar</ActionBtn>
                       <ActionBtn onClick={async () => {
-                        if (editData._nombre && editData._nombre !== alumno.nombre) {
-                          await api(`alumnos?id=eq.${alumno.id}`, "PATCH", { nombre: editData._nombre, categoria: editData._categoria ?? alumno.categoria });
-                          setAlumnos(prev => prev.map(a => a.id === alumno.id ? { ...a, nombre: editData._nombre, categoria: editData._categoria ?? alumno.categoria } : a));
-                        } else if (editData._categoria !== undefined) {
-                          await api(`alumnos?id=eq.${alumno.id}`, "PATCH", { categoria: editData._categoria });
-                          setAlumnos(prev => prev.map(a => a.id === alumno.id ? { ...a, categoria: editData._categoria } : a));
+                        const alumnoUpdate = {};
+                        if (editData._nombre !== undefined && editData._nombre !== alumno.nombre) alumnoUpdate.nombre = editData._nombre;
+                        if (editData._categoria !== undefined) alumnoUpdate.categoria = editData._categoria;
+                        if (editData._responsable !== undefined) alumnoUpdate.responsable = editData._responsable;
+                        if (editData._telefono !== undefined) alumnoUpdate.telefono = editData._telefono;
+                        if (Object.keys(alumnoUpdate).length > 0) {
+                          await api(`alumnos?id=eq.${alumno.id}`, "PATCH", alumnoUpdate);
+                          setAlumnos(prev => prev.map(a => a.id === alumno.id ? { ...a, ...alumnoUpdate } : a));
                         }
                         const pagoData = {};
                         if (editData.seña !== undefined) pagoData.seña = editData.seña;
@@ -396,7 +414,7 @@ export default function App() {
       {/* MODAL NUEVO ALUMNO */}
       {showNuevoAlumno && (
         <Modal onClose={() => setShowNuevoAlumno(false)} title="Nuevo Alumno">
-          {[{k:"nombre",l:"Nombre y Apellido"},{k:"categoria",l:"Categoría"}].map(f => (
+          {[{k:"nombre",l:"Nombre y Apellido"},{k:"categoria",l:"Categoría"},{k:"responsable",l:"Responsable (padre/madre)"},{k:"telefono",l:"Teléfono/WhatsApp"}].map(f => (
             <div key={f.k} style={{ marginBottom: 10 }}>
               <label style={{ display: "block", fontSize: 10, color: "#64748b", marginBottom: 3, textTransform: "uppercase", letterSpacing: 1 }}>{f.l}</label>
               <input value={nuevoAlumno[f.k]} onChange={e => setNuevoAlumno(p => ({ ...p, [f.k]: e.target.value }))}
