@@ -53,6 +53,7 @@ export default function App() {
   const [montoTemp, setMontoTemp] = useState("");
   const [editingCierre, setEditingCierre] = useState(false);
   const [cierreTemp, setCierreTemp] = useState("");
+  const [viewMode, setViewMode] = useState("cards"); // "cards" o "table"
 
   useEffect(() => { loadData(); }, []);
 
@@ -227,6 +228,11 @@ export default function App() {
           <Btn icon="📊" label="Estadísticas" onClick={() => setShowStats(true)} color="#6366f1" />
           <Btn icon="⬇" label="Excel" onClick={() => exportToExcel(filteredAlumnos, getPago, monto, eventoActivo)} color="#10b981" />
           <Btn icon="+" label="Alumno" onClick={() => setShowNuevoAlumno(true)} color="#3b82f6" />
+          <button onClick={() => setViewMode(v => v === "cards" ? "table" : "cards")}
+            title={viewMode === "cards" ? "Ver como tabla" : "Ver como tarjetas"}
+            style={{ background: "#334155", border: "none", color: "#94a3b8", borderRadius: 7, padding: "7px 10px", cursor: "pointer", fontSize: 15 }}>
+            {viewMode === "cards" ? "☰" : "⊞"}
+          </button>
           <button onClick={loadData} title="Recargar" style={{ background: "#334155", border: "none", color: "#94a3b8", borderRadius: 7, padding: "7px 10px", cursor: "pointer", fontSize: 15 }}>↻</button>
         </div>
       </div>
@@ -319,6 +325,7 @@ export default function App() {
       </div>
 
       {/* CARDS */}
+      {viewMode === "cards" && (
       <div style={{ padding: "0 20px 32px", display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 12 }}>
         {filteredAlumnos.map(alumno => {
           const pago = getPago(alumno.id);
@@ -458,6 +465,116 @@ export default function App() {
           );
         })}
       </div>
+      )}
+
+      {/* TABLE VIEW */}
+      {viewMode === "table" && (
+        <div style={{ padding: "0 20px 32px", overflowX: "auto" }}>
+          <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 700 }}>
+            <thead>
+              <tr style={{ background: "#1e293b" }}>
+                {["Nombre","Categoría","Responsable","Teléfono","Seña","F. Seña","Saldo","F. Saldo","Estado","Observación",""].map(h => (
+                  <th key={h} style={{ padding: "10px 12px", textAlign: "left", fontSize: 11, fontWeight: 600, letterSpacing: 1, textTransform: "uppercase", color: "#64748b", borderBottom: "1px solid #334155", whiteSpace: "nowrap" }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {filteredAlumnos.map((alumno, i) => {
+                const pago = getPago(alumno.id);
+                const status = getStatus(pago, monto);
+                const pagado2 = (Number(pago.seña) || 0) + (Number(pago.saldo) || 0);
+                const isEditing = editingPago === alumno.id;
+                return (
+                  <tr key={alumno.id} style={{ borderBottom: "1px solid #1e293b", background: i % 2 === 0 ? "#0f172a" : "#111827" }}
+                    onMouseEnter={e => e.currentTarget.style.background = "#1e293b"}
+                    onMouseLeave={e => e.currentTarget.style.background = i % 2 === 0 ? "#0f172a" : "#111827"}>
+                    <td style={{ padding: "8px 12px" }}>
+                      {isEditing ? <input value={editData._nombre ?? alumno.nombre} onChange={e => setEditData(p => ({ ...p, _nombre: e.target.value }))} style={{ background: "#0f172a", border: "1px solid #3b82f6", borderRadius: 4, padding: "3px 6px", color: "#f1f5f9", fontSize: 13, outline: "none", width: 140 }} />
+                        : <span style={{ fontSize: 13, fontWeight: 600, color: "#f1f5f9" }}>{alumno.nombre}</span>}
+                    </td>
+                    <td style={{ padding: "8px 12px", fontSize: 12, color: "#64748b" }}>
+                      {isEditing ? <input value={editData._categoria ?? alumno.categoria ?? ""} onChange={e => setEditData(p => ({ ...p, _categoria: e.target.value }))} style={{ background: "#0f172a", border: "1px solid #334155", borderRadius: 4, padding: "3px 6px", color: "#94a3b8", fontSize: 12, outline: "none", width: 90 }} />
+                        : alumno.categoria}
+                    </td>
+                    <td style={{ padding: "8px 12px", fontSize: 12, color: "#94a3b8" }}>
+                      {isEditing ? <input value={editData._responsable ?? alumno.responsable ?? ""} onChange={e => setEditData(p => ({ ...p, _responsable: e.target.value }))} style={{ background: "#0f172a", border: "1px solid #334155", borderRadius: 4, padding: "3px 6px", color: "#94a3b8", fontSize: 12, outline: "none", width: 110 }} />
+                        : alumno.responsable}
+                    </td>
+                    <td style={{ padding: "8px 12px" }}>
+                      {isEditing ? <input value={editData._telefono ?? alumno.telefono ?? ""} onChange={e => setEditData(p => ({ ...p, _telefono: e.target.value }))} style={{ background: "#0f172a", border: "1px solid #334155", borderRadius: 4, padding: "3px 6px", color: "#94a3b8", fontSize: 12, outline: "none", width: 100 }} />
+                        : alumno.telefono ? <a href={`tel:${alumno.telefono}`} style={{ fontSize: 12, color: "#3b82f6", textDecoration: "none" }}>{alumno.telefono}</a> : <span style={{ color: "#334155", fontSize: 12 }}>—</span>}
+                    </td>
+                    <td style={{ padding: "8px 12px" }}>
+                      {isEditing ? <input value={editData.seña ?? pago.seña ?? ""} onChange={e => setEditData(p => ({ ...p, seña: e.target.value === "" ? null : Number(e.target.value) }))} style={{ background: "#0f172a", border: "1px solid #334155", borderRadius: 4, padding: "3px 6px", color: "#8b5cf6", fontSize: 13, outline: "none", width: 80 }} />
+                        : <span style={{ fontSize: 13, fontWeight: 600, color: pago.seña ? "#8b5cf6" : "#334155" }}>{pago.seña ? fmt(pago.seña) : "—"}</span>}
+                    </td>
+                    <td style={{ padding: "8px 12px", fontSize: 12, color: "#475569" }}>
+                      {isEditing ? <input value={editData.fecha_seña ?? pago.fecha_seña ?? ""} onChange={e => setEditData(p => ({ ...p, fecha_seña: e.target.value }))} style={{ background: "#0f172a", border: "1px solid #334155", borderRadius: 4, padding: "3px 6px", color: "#94a3b8", fontSize: 12, outline: "none", width: 70 }} />
+                        : pago.fecha_seña || "—"}
+                    </td>
+                    <td style={{ padding: "8px 12px" }}>
+                      {isEditing ? <input value={editData.saldo ?? pago.saldo ?? ""} onChange={e => setEditData(p => ({ ...p, saldo: e.target.value === "" ? null : Number(e.target.value) }))} style={{ background: "#0f172a", border: "1px solid #334155", borderRadius: 4, padding: "3px 6px", color: "#10b981", fontSize: 13, outline: "none", width: 80 }} />
+                        : <span style={{ fontSize: 13, fontWeight: 600, color: pago.saldo ? "#10b981" : "#334155" }}>{pago.saldo ? fmt(pago.saldo) : "—"}</span>}
+                    </td>
+                    <td style={{ padding: "8px 12px", fontSize: 12, color: "#475569" }}>
+                      {isEditing ? <input value={editData.fecha_saldo ?? pago.fecha_saldo ?? ""} onChange={e => setEditData(p => ({ ...p, fecha_saldo: e.target.value }))} style={{ background: "#0f172a", border: "1px solid #334155", borderRadius: 4, padding: "3px 6px", color: "#94a3b8", fontSize: 12, outline: "none", width: 70 }} />
+                        : pago.fecha_saldo || "—"}
+                    </td>
+                    <td style={{ padding: "8px 12px" }}>
+                      <span style={{ fontSize: 11, fontWeight: 600, color: status.color, background: status.bg, padding: "2px 8px", borderRadius: 20, whiteSpace: "nowrap" }}>{status.label}</span>
+                    </td>
+                    <td style={{ padding: "8px 12px" }}>
+                      {isEditing ? <input value={editData.observacion ?? pago.observacion ?? ""} onChange={e => setEditData(p => ({ ...p, observacion: e.target.value }))} style={{ background: "#0f172a", border: "1px solid #334155", borderRadius: 4, padding: "3px 6px", color: "#94a3b8", fontSize: 12, outline: "none", width: 120 }} />
+                        : <span style={{ fontSize: 12, color: "#64748b" }}>{pago.observacion || ""}</span>}
+                    </td>
+                    <td style={{ padding: "8px 8px", whiteSpace: "nowrap" }}>
+                      {isEditing ? (
+                        <div style={{ display: "flex", gap: 4 }}>
+                          <ActionBtn onClick={() => { setEditingPago(null); setEditData({}); }} secondary>✕</ActionBtn>
+                          <ActionBtn onClick={async () => {
+                            const alumnoUpdate = {};
+                            if (editData._nombre !== undefined && editData._nombre !== alumno.nombre) alumnoUpdate.nombre = editData._nombre;
+                            if (editData._categoria !== undefined) alumnoUpdate.categoria = editData._categoria;
+                            if (editData._responsable !== undefined) alumnoUpdate.responsable = editData._responsable;
+                            if (editData._telefono !== undefined) alumnoUpdate.telefono = editData._telefono;
+                            if (Object.keys(alumnoUpdate).length > 0) {
+                              await api(`alumnos?id=eq.${alumno.id}`, "PATCH", alumnoUpdate);
+                              setAlumnos(prev => prev.map(a => a.id === alumno.id ? { ...a, ...alumnoUpdate } : a));
+                            }
+                            const pagoData = {};
+                            if (editData.seña !== undefined) pagoData.seña = editData.seña;
+                            if (editData.fecha_seña !== undefined) pagoData.fecha_seña = editData.fecha_seña;
+                            if (editData.saldo !== undefined) pagoData.saldo = editData.saldo;
+                            if (editData.fecha_saldo !== undefined) pagoData.fecha_saldo = editData.fecha_saldo;
+                            if (editData.observacion !== undefined) pagoData.observacion = editData.observacion;
+                            if (Object.keys(pagoData).length > 0) await savePago(alumno.id);
+                            else { setEditingPago(null); setEditData({}); }
+                          }} color="#3b82f6">✓</ActionBtn>
+                        </div>
+                      ) : (
+                        <div style={{ display: "flex", gap: 4 }}>
+                          {status.label !== "Al día" && alumno.telefono && (() => {
+                            const debe2 = monto > 0 ? monto - pagado2 : null;
+                            const responsable = alumno.responsable ? `Hola ${alumno.responsable}!` : "Hola!";
+                            const montoMsg = debe2 && debe2 > 0 ? ` Saldo pendiente: $${Number(debe2).toLocaleString("es-AR")}.` : monto > 0 ? ` Monto total: $${Number(monto).toLocaleString("es-AR")}.` : "";
+                            const cierreMsg = eventoActivo?.fecha_cierre ? ` Fecha límite: ${eventoActivo.fecha_cierre}.` : "";
+                            const msg = `${responsable} Te recordamos que ${alumno.nombre} tiene pendiente el pago del torneo ${eventoActivo?.nombre || ""}.${montoMsg}${cierreMsg} Gracias!`;
+                            const url = `https://wa.me/${alumno.telefono.replace(/\D/g, "")}?text=${encodeURIComponent(msg)}`;
+                            return <a key="wa" href={url} target="_blank" rel="noreferrer" style={{ fontSize: 16, textDecoration: "none" }} title="Enviar recordatorio">📲</a>;
+                          })()}
+                          <ActionBtn onClick={() => { setEditingPago(alumno.id); setEditData({}); }} color="#3b82f620" textColor="#3b82f6">Editar</ActionBtn>
+                          <ActionBtn onClick={() => deleteAlumno(alumno.id)} color="#ef444420" textColor="#ef4444">✕</ActionBtn>
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+          <div style={{ marginTop: 10, fontSize: 12, color: "#475569", textAlign: "right" }}>{filteredAlumnos.length} alumnos</div>
+        </div>
+      )}
 
       {/* MODAL NUEVO EVENTO */}
       {showNuevoEvento && (
