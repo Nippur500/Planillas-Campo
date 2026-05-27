@@ -235,7 +235,7 @@ export default function App() {
         </div>
         <div style={{ display: "flex", gap: 7, flexWrap: "wrap" }}>
           <Btn icon="🆕" label="Nuevo Evento" onClick={() => setShowNuevoEvento(true)} color="#8b5cf6" />
-          <Btn icon="📋" label="Historial" onClick={() => setShowHistorial(true)} color="#475569" />
+          <Btn icon="📋" label="Eventos" onClick={() => setShowHistorial(true)} color="#0ea5e9" />
           <Btn icon="📊" label="Estadísticas" onClick={() => setShowStats(true)} color="#6366f1" />
           <Btn icon="⬇" label="Excel" onClick={() => exportToExcel(filteredAlumnos, getPago, monto, eventoActivo)} color="#10b981" />
           <Btn icon="+" label="Alumno" onClick={() => setShowNuevoAlumno(true)} color="#3b82f6" />
@@ -638,7 +638,7 @@ export default function App() {
 
       {/* MODAL HISTORIAL */}
       {showHistorial && (
-        <Modal onClose={() => setShowHistorial(false)} title="📋 Historial de Eventos">
+        <Modal onClose={() => setShowHistorial(false)} title="📋 Eventos">
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {eventos.map(ev => (
               <div key={ev.id} onClick={() => { setEventoActivo(ev); setShowHistorial(false); }}
