@@ -45,12 +45,14 @@ export default function App() {
   const [showNuevoEvento, setShowNuevoEvento] = useState(false);
   const [showNuevoAlumno, setShowNuevoAlumno] = useState(false);
   const [showHistorial, setShowHistorial] = useState(false);
-  const [nuevoEvento, setNuevoEvento] = useState({ nombre: "", fecha: "", monto: "" });
+  const [nuevoEvento, setNuevoEvento] = useState({ nombre: "", fecha: "", monto: "", fecha_cierre: "" });
   const [nuevoAlumno, setNuevoAlumno] = useState({ nombre: "", categoria: "", responsable: "", telefono: "" });
   const [editingPago, setEditingPago] = useState(null);
   const [editData, setEditData] = useState({});
   const [editingMonto, setEditingMonto] = useState(false);
   const [montoTemp, setMontoTemp] = useState("");
+  const [editingCierre, setEditingCierre] = useState(false);
+  const [cierreTemp, setCierreTemp] = useState("");
 
   useEffect(() => { loadData(); }, []);
 
@@ -84,6 +86,7 @@ export default function App() {
         nombre: nuevoEvento.nombre.trim(),
         fecha: nuevoEvento.fecha,
         monto: Number(nuevoEvento.monto) || 0,
+        fecha_cierre: nuevoEvento.fecha_cierre || "",
       });
       // crear pagos vacíos para todos los alumnos
       const pagosNuevos = alumnos.filter(a => a.activo).map(a => ({
@@ -96,7 +99,7 @@ export default function App() {
       }
       setEventos(prev => [ev, ...prev]);
       setEventoActivo(ev);
-      setNuevoEvento({ nombre: "", fecha: "", monto: "" });
+      setNuevoEvento({ nombre: "", fecha: "", monto: "", fecha_cierre: "" });
       setShowNuevoEvento(false);
     } catch (e) { setError("Error al crear evento: " + e.message); }
     finally { setSaving(false); }
@@ -150,6 +153,14 @@ export default function App() {
     catch (e) { setError("Error al guardar monto"); }
   };
 
+  const saveCierre = async () => {
+    setEventos(prev => prev.map(e => e.id === eventoActivo.id ? { ...e, fecha_cierre: cierreTemp } : e));
+    setEventoActivo(prev => ({ ...prev, fecha_cierre: cierreTemp }));
+    setEditingCierre(false);
+    try { await api(`eventos?id=eq.${eventoActivo.id}`, "PATCH", { fecha_cierre: cierreTemp }); }
+    catch (e) { setError("Error al guardar fecha de cierre"); }
+  };
+
   const deleteAlumno = async (id) => {
     if (!confirm("¿Eliminar este alumno de todos los eventos?")) return;
     setAlumnos(prev => prev.filter(a => a.id !== id));
@@ -159,6 +170,23 @@ export default function App() {
   };
 
   const monto = eventoActivo?.monto || 0;
+
+  const getDiasRestantes = () => {
+    if (!eventoActivo?.fecha_cierre) return null;
+    const hoy = new Date();
+    hoy.setHours(0, 0, 0, 0);
+    const parts = eventoActivo.fecha_cierre.split("/");
+    let cierre;
+    if (parts.length === 3) {
+      cierre = new Date(parts[2], parts[1] - 1, parts[0]);
+    } else {
+      cierre = new Date(eventoActivo.fecha_cierre);
+    }
+    const diff = Math.ceil((cierre - hoy) / (1000 * 60 * 60 * 24));
+    return diff;
+  };
+
+  const diasRestantes = getDiasRestantes();
 
   const filteredAlumnos = alumnos.filter(a => {
     if (!eventoActivo) return false;
@@ -208,7 +236,38 @@ export default function App() {
         <div style={{ background: "#1a1f35", borderBottom: "1px solid #334155", padding: "8px 20px", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
           <div style={{ fontSize: 11, color: "#64748b", textTransform: "uppercase", letterSpacing: 1 }}>Evento activo:</div>
           <div style={{ fontSize: 14, fontWeight: 700, color: "#f1f5f9" }}>{eventoActivo.nombre}</div>
-          {eventoActivo.fecha && <div style={{ fontSize: 11, color: "#64748b" }}>{eventoActivo.fecha}</div>}
+          {eventoActivo.fecha && <div style={{ fontSize: 11, color: "#64748b" }}>📅 {eventoActivo.fecha}</div>}
+          {eventoActivo.fecha_cierre || true ? (
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <span style={{ fontSize: 11, color: "#64748b" }}>Cierre:</span>
+              {editingCierre ? (
+                <>
+                  <input value={cierreTemp} onChange={e => setCierreTemp(e.target.value)}
+                    onKeyDown={e => { if (e.key === "Enter") saveCierre(); if (e.key === "Escape") setEditingCierre(false); }}
+                    placeholder="dd/mm/aaaa" autoFocus
+                    style={{ background: "#0f172a", border: "1px solid #3b82f6", borderRadius: 5, padding: "2px 8px", color: "#f1f5f9", fontSize: 13, width: 120, outline: "none" }} />
+                  <ActionBtn onClick={saveCierre} color="#3b82f6">✓</ActionBtn>
+                  <ActionBtn onClick={() => setEditingCierre(false)} secondary>✕</ActionBtn>
+                </>
+              ) : (
+                <button onClick={() => { setEditingCierre(true); setCierreTemp(eventoActivo.fecha_cierre || ""); }}
+                  style={{
+                    background: diasRestantes !== null && diasRestantes <= 3 ? "#1c0a00" : "#1e293b",
+                    border: `1px solid ${diasRestantes !== null && diasRestantes <= 3 ? "#f97316" : "#334155"}`,
+                    borderRadius: 6, padding: "2px 10px", cursor: "pointer", display: "flex", alignItems: "center", gap: 6
+                  }}>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: !eventoActivo.fecha_cierre ? "#f97316" : diasRestantes <= 0 ? "#ef4444" : diasRestantes <= 3 ? "#f97316" : "#22c55e" }}>
+                    {eventoActivo.fecha_cierre || "Definir cierre ✏️"}
+                  </span>
+                  {diasRestantes !== null && eventoActivo.fecha_cierre && (
+                    <span style={{ fontSize: 11, fontWeight: 600, color: diasRestantes <= 0 ? "#ef4444" : diasRestantes <= 3 ? "#f97316" : "#22c55e" }}>
+                      {diasRestantes <= 0 ? "⚠️ Vencido" : diasRestantes === 1 ? "⚠️ 1 día" : `⏳ ${diasRestantes} días`}
+                    </span>
+                  )}
+                </button>
+              )}
+            </div>
+          ) : null}
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
             <span style={{ fontSize: 11, color: "#64748b" }}>Monto:</span>
             {editingMonto ? (
@@ -278,7 +337,14 @@ export default function App() {
                   ) : (
                     <div style={{ fontSize: 14, fontWeight: 600, color: "#f1f5f9" }}>{alumno.nombre}</div>
                   )}
-                  <span style={{ fontSize: 10, fontWeight: 600, color: status.color, background: status.bg, padding: "2px 8px", borderRadius: 20, whiteSpace: "nowrap", marginLeft: 6 }}>{status.label}</span>
+                  <div style={{ display: "flex", gap: 4, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
+                    {diasRestantes !== null && diasRestantes <= 3 && status.label !== "Al día" && (
+                      <span style={{ fontSize: 10, fontWeight: 600, color: "#f97316", background: "#1c0a00", padding: "2px 6px", borderRadius: 20 }}>
+                        {diasRestantes <= 0 ? "⚠️ Vencido" : `⚠️ ${diasRestantes}d`}
+                      </span>
+                    )}
+                    <span style={{ fontSize: 10, fontWeight: 600, color: status.color, background: status.bg, padding: "2px 8px", borderRadius: 20, whiteSpace: "nowrap" }}>{status.label}</span>
+                  </div>
                 </div>
 
                 {!isEditing && (alumno.categoria || alumno.responsable || alumno.telefono) && (
@@ -379,7 +445,7 @@ export default function App() {
       {showNuevoEvento && (
         <Modal onClose={() => setShowNuevoEvento(false)} title="🆕 Nuevo Evento">
           <p style={{ fontSize: 12, color: "#64748b", margin: "0 0 14px" }}>Se crearán pagos en blanco para todos los alumnos actuales. Los datos del evento anterior quedan guardados.</p>
-          {[{k:"nombre",l:"Nombre del evento"},{k:"fecha",l:"Fecha"},{k:"monto",l:"Monto total ($)"}].map(f => (
+          {[{k:"nombre",l:"Nombre del evento"},{k:"fecha",l:"Fecha del evento"},{k:"fecha_cierre",l:"Fecha cierre de pagos"},{k:"monto",l:"Monto total ($)"}].map(f => (
             <div key={f.k} style={{ marginBottom: 10 }}>
               <label style={{ display: "block", fontSize: 10, color: "#64748b", marginBottom: 3, textTransform: "uppercase", letterSpacing: 1 }}>{f.l}</label>
               <input value={nuevoEvento[f.k]} onChange={e => setNuevoEvento(p => ({ ...p, [f.k]: e.target.value }))}
