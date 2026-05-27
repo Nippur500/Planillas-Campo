@@ -45,7 +45,7 @@ export default function App() {
   const [showNuevoEvento, setShowNuevoEvento] = useState(false);
   const [showNuevoAlumno, setShowNuevoAlumno] = useState(false);
   const [showHistorial, setShowHistorial] = useState(false);
-  const [nuevoEvento, setNuevoEvento] = useState({ nombre: "", fecha: "", monto: "", fecha_cierre: "" });
+  const [nuevoEvento, setNuevoEvento] = useState({ nombre: "", fecha: "", monto: "", fecha_cierre: "", notas: "" });
   const [nuevoAlumno, setNuevoAlumno] = useState({ nombre: "", categoria: "", responsable: "", telefono: "" });
   const [editingPago, setEditingPago] = useState(null);
   const [editData, setEditData] = useState({});
@@ -53,6 +53,8 @@ export default function App() {
   const [montoTemp, setMontoTemp] = useState("");
   const [editingCierre, setEditingCierre] = useState(false);
   const [cierreTemp, setCierreTemp] = useState("");
+  const [editingNotas, setEditingNotas] = useState(false);
+  const [notasTemp, setNotasTemp] = useState("");
   const [viewMode, setViewMode] = useState("cards"); // "cards" o "table"
 
   useEffect(() => { loadData(); }, []);
@@ -88,6 +90,7 @@ export default function App() {
         fecha: nuevoEvento.fecha,
         monto: Number(nuevoEvento.monto) || 0,
         fecha_cierre: nuevoEvento.fecha_cierre || "",
+        notas: nuevoEvento.notas || "",
       });
       // crear pagos vacíos para todos los alumnos
       const pagosNuevos = alumnos.filter(a => a.activo).map(a => ({
@@ -100,7 +103,7 @@ export default function App() {
       }
       setEventos(prev => [ev, ...prev]);
       setEventoActivo(ev);
-      setNuevoEvento({ nombre: "", fecha: "", monto: "", fecha_cierre: "" });
+      setNuevoEvento({ nombre: "", fecha: "", monto: "", fecha_cierre: "", notas: "" });
       setShowNuevoEvento(false);
     } catch (e) { setError("Error al crear evento: " + e.message); }
     finally { setSaving(false); }
@@ -160,6 +163,14 @@ export default function App() {
     setEditingCierre(false);
     try { await api(`eventos?id=eq.${eventoActivo.id}`, "PATCH", { fecha_cierre: cierreTemp }); }
     catch (e) { setError("Error al guardar fecha de cierre"); }
+  };
+
+  const saveNotas = async () => {
+    setEventos(prev => prev.map(e => e.id === eventoActivo.id ? { ...e, notas: notasTemp } : e));
+    setEventoActivo(prev => ({ ...prev, notas: notasTemp }));
+    setEditingNotas(false);
+    try { await api(`eventos?id=eq.${eventoActivo.id}`, "PATCH", { notas: notasTemp }); }
+    catch (e) { setError("Error al guardar notas"); }
   };
 
   const deleteAlumno = async (id) => {
@@ -291,6 +302,31 @@ export default function App() {
               </button>
             )}
           </div>
+        </div>
+      )}
+
+      {/* NOTAS DEL EVENTO */}
+      {eventoActivo && (
+        <div style={{ background: "#0f172a", borderBottom: "1px solid #1e293b", padding: "8px 20px", display: "flex", alignItems: "flex-start", gap: 10 }}>
+          <span style={{ fontSize: 11, color: "#64748b", textTransform: "uppercase", letterSpacing: 1, whiteSpace: "nowrap", paddingTop: 2 }}>📝 Notas:</span>
+          {editingNotas ? (
+            <div style={{ flex: 1, display: "flex", gap: 6, alignItems: "flex-start" }}>
+              <textarea value={notasTemp} onChange={e => setNotasTemp(e.target.value)} autoFocus rows={3}
+                placeholder="Ej: Lugar: Polideportivo Norte. Horario: 9hs. Traer ropa de competencia."
+                style={{ flex: 1, background: "#1e293b", border: "1px solid #3b82f6", borderRadius: 6, padding: "6px 10px", color: "#e2e8f0", fontSize: 12, outline: "none", resize: "vertical", fontFamily: "inherit" }} />
+              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                <ActionBtn onClick={saveNotas} color="#3b82f6">✓</ActionBtn>
+                <ActionBtn onClick={() => setEditingNotas(false)} secondary>✕</ActionBtn>
+              </div>
+            </div>
+          ) : (
+            <button onClick={() => { setEditingNotas(true); setNotasTemp(eventoActivo.notas || ""); }}
+              style={{ flex: 1, background: "none", border: "none", cursor: "pointer", textAlign: "left", padding: 0 }}>
+              <span style={{ fontSize: 12, color: eventoActivo.notas ? "#94a3b8" : "#475569", fontStyle: eventoActivo.notas ? "normal" : "italic" }}>
+                {eventoActivo.notas || "Agregar notas del evento (lugar, horario, requisitos...) ✏️"}
+              </span>
+            </button>
+          )}
         </div>
       )}
 
@@ -587,6 +623,12 @@ export default function App() {
                 style={{ width: "100%", background: "#0f172a", border: "1px solid #334155", borderRadius: 6, padding: "8px 10px", color: "#e2e8f0", fontSize: 13, outline: "none", boxSizing: "border-box" }} />
             </div>
           ))}
+          <div style={{ marginBottom: 10 }}>
+            <label style={{ display: "block", fontSize: 10, color: "#64748b", marginBottom: 3, textTransform: "uppercase", letterSpacing: 1 }}>Notas (lugar, horario, requisitos...)</label>
+            <textarea value={nuevoEvento.notas} onChange={e => setNuevoEvento(p => ({ ...p, notas: e.target.value }))} rows={3}
+              placeholder="Ej: Polideportivo Norte, 9hs, ropa de competencia obligatoria"
+              style={{ width: "100%", background: "#0f172a", border: "1px solid #334155", borderRadius: 6, padding: "8px 10px", color: "#e2e8f0", fontSize: 13, outline: "none", boxSizing: "border-box", resize: "vertical", fontFamily: "inherit" }} />
+          </div>
           <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 14 }}>
             <ActionBtn onClick={() => setShowNuevoEvento(false)} secondary>Cancelar</ActionBtn>
             <ActionBtn onClick={crearEvento} color="#8b5cf6">Crear Evento</ActionBtn>
@@ -604,6 +646,7 @@ export default function App() {
                 <div>
                   <div style={{ fontSize: 14, fontWeight: 600, color: "#f1f5f9" }}>{ev.nombre}</div>
                   <div style={{ fontSize: 11, color: "#64748b" }}>{ev.fecha || "Sin fecha"} · {fmt(ev.monto) || "Sin monto"}</div>
+                  {ev.notas && <div style={{ fontSize: 11, color: "#475569", marginTop: 3 }}>📝 {ev.notas}</div>}
                 </div>
                 {ev.id === eventoActivo?.id && <span style={{ fontSize: 11, color: "#3b82f6", fontWeight: 600 }}>ACTIVO</span>}
               </div>
