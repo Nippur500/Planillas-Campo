@@ -211,7 +211,70 @@ export default function App() {
     catch (e) { setError("Error al eliminar"); loadData(); }
   };
 
-  const monto = eventoActivo?.monto || 0;
+  const exportPendientes = (pendientes, getPago, monto, evento) => {
+    const rows = pendientes.map(a => {
+      const p = getPago(a.id);
+      const pagado = (Number(p.seña) || 0) + (Number(p.saldo) || 0);
+      const debe = monto > 0 ? monto - pagado : "";
+      const status = getStatus(p, monto);
+      return {
+        Nombre: a.nombre, Categoría: a.categoria || "", Nivel: a.nivel || "",
+        Responsable: a.responsable || "", Teléfono: a.telefono || "",
+        Estado: status.label, "Seña pagada": p.seña || "", "Saldo pagado": p.saldo || "",
+        "Total pagado": pagado, "Monto total": monto, "Debe": debe,
+      };
+    });
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.json_to_sheet(rows);
+    ws["!cols"] = [25,14,12,20,14,14,14,14,14,14,14].map(w => ({ wch: w }));
+    XLSX.utils.book_append_sheet(wb, ws, "Pendientes");
+    XLSX.writeFile(wb, `pendientes_${evento?.nombre || "evento"}.xlsx`);
+  };
+
+  const exportAlumnos = () => {
+    const rows = alumnos.map(a => ({
+      Nombre: a.nombre, Categoría: a.categoria || "", Nivel: a.nivel || "",
+      Responsable: a.responsable || "", Teléfono: a.telefono || "",
+      Estado: a.activo ? "Activo" : "Inactivo",
+    }));
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.json_to_sheet(rows);
+    ws["!cols"] = [25,14,12,20,14,10].map(w => ({ wch: w }));
+    XLSX.utils.book_append_sheet(wb, ws, "Alumnos");
+    XLSX.writeFile(wb, "base_alumnos.xlsx");
+  };
+
+  const exportEstadisticas = (filteredAlumnos, getPago, monto, eventoActivo, alDia, conSeña, sinPagar, totalSeña, totalSaldo) => {
+    const resumen = [
+      { Campo: "Evento", Valor: eventoActivo?.nombre || "" },
+      { Campo: "Monto por alumno", Valor: monto },
+      { Campo: "Total alumnos", Valor: filteredAlumnos.length },
+      { Campo: "Al día", Valor: alDia },
+      { Campo: "Seña pagada", Valor: conSeña },
+      { Campo: "Sin pagar", Valor: sinPagar },
+      { Campo: "Total señas cobradas", Valor: totalSeña },
+      { Campo: "Total saldos cobrados", Valor: totalSaldo },
+      { Campo: "Total recaudado", Valor: totalSeña + totalSaldo },
+      { Campo: "Total esperado", Valor: monto > 0 ? monto * filteredAlumnos.length : "" },
+    ];
+    const detalle = filteredAlumnos.map(a => {
+      const p = getPago(a.id);
+      const pagado = (Number(p.seña) || 0) + (Number(p.saldo) || 0);
+      return {
+        Nombre: a.nombre, Categoría: a.categoria || "", Nivel: a.nivel || "",
+        Seña: p.seña || "", Saldo: p.saldo || "", "Total pagado": pagado,
+        "Monto total": monto, Estado: getStatus(p, monto).label,
+      };
+    });
+    const wb = XLSX.utils.book_new();
+    const wsR = XLSX.utils.json_to_sheet(resumen);
+    wsR["!cols"] = [22,16].map(w => ({ wch: w }));
+    XLSX.utils.book_append_sheet(wb, wsR, "Resumen");
+    const wsD = XLSX.utils.json_to_sheet(detalle);
+    wsD["!cols"] = [25,14,12,12,12,14,14,14].map(w => ({ wch: w }));
+    XLSX.utils.book_append_sheet(wb, wsD, "Detalle");
+    XLSX.writeFile(wb, `estadisticas_${eventoActivo?.nombre || "evento"}.xlsx`);
+  };
 
   const getDiasRestantes = () => {
     if (!eventoActivo?.fecha_cierre) return null;
@@ -703,7 +766,10 @@ export default function App() {
           <Modal onClose={() => setShowPendientes(false)} title={`⚠️ Pendientes — ${eventoActivo?.nombre}`}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
               <div style={{ fontSize: 12, color: "#64748b" }}>{pendientes.length} alumnos con deuda</div>
-              {monto > 0 && <div style={{ fontSize: 12, fontWeight: 600, color: "#ef4444" }}>Total pendiente: {fmt(totalDeuda)}</div>}
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                {monto > 0 && <div style={{ fontSize: 12, fontWeight: 600, color: "#ef4444" }}>Total: {fmt(totalDeuda)}</div>}
+                <ActionBtn onClick={() => exportPendientes(pendientes, getPago, monto, eventoActivo)} color="#10b981">⬇ Descargar</ActionBtn>
+              </div>
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: "60vh", overflowY: "auto" }}>
               {pendientes.map(alumno => {
@@ -752,7 +818,10 @@ export default function App() {
             <div style={{ fontSize: 12, color: "#64748b" }}>
               {alumnos.filter(a => a.activo).length} activos · {alumnos.filter(a => !a.activo).length} inactivos · {alumnos.length} total
             </div>
-            <ActionBtn onClick={() => { setShowAlumnos(false); setShowNuevoAlumno(true); }} color="#3b82f6">+ Nuevo alumno</ActionBtn>
+            <div style={{ display: "flex", gap: 6 }}>
+              <ActionBtn onClick={exportAlumnos} color="#10b981">⬇ Descargar</ActionBtn>
+              <ActionBtn onClick={() => { setShowAlumnos(false); setShowNuevoAlumno(true); }} color="#3b82f6">+ Nuevo alumno</ActionBtn>
+            </div>
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: "60vh", overflowY: "auto" }}>
             {[...alumnos].sort((a, b) => {
@@ -918,7 +987,10 @@ export default function App() {
                   </div>
                 </div>
                 <div style={{ background: "#0f172a", borderRadius: 8, border: "1px solid #f59e0b40", padding: 14 }}>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: "#f59e0b", marginBottom: 10 }}>Resumen financiero — {eventoActivo?.nombre}</div>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: "#f59e0b" }}>Resumen financiero — {eventoActivo?.nombre}</div>
+                    <ActionBtn onClick={() => exportEstadisticas(filteredAlumnos, getPago, monto, eventoActivo, alDia, conSeña, sinPagar, totalSeña, totalSaldo)} color="#10b981">⬇ Descargar</ActionBtn>
+                  </div>
                   <SRow label="Monto por alumno" val={fmt(monto) || "Sin definir"} color="#f59e0b" />
                   <SRow label="Total señas cobradas" val={fmt(totalSeña)} color="#8b5cf6" />
                   <SRow label="Total saldos cobrados" val={fmt(totalSaldo)} color="#10b981" />
