@@ -45,6 +45,7 @@ export default function App() {
   const [showNuevoEvento, setShowNuevoEvento] = useState(false);
   const [showNuevoAlumno, setShowNuevoAlumno] = useState(false);
   const [showHistorial, setShowHistorial] = useState(false);
+  const [showAlumnos, setShowAlumnos] = useState(false);
   const [nuevoEvento, setNuevoEvento] = useState({ nombre: "", fecha: "", monto: "", fecha_cierre: "", notas: "" });
   const [nuevoAlumno, setNuevoAlumno] = useState({ nombre: "", categoria: "", nivel: "", responsable: "", telefono: "" });
   const [editingPago, setEditingPago] = useState(null);
@@ -191,6 +192,13 @@ export default function App() {
     finally { setSaving(false); }
   };
 
+  const toggleActivo = async (alumno) => {
+    const newActivo = !alumno.activo;
+    setAlumnos(prev => prev.map(a => a.id === alumno.id ? { ...a, activo: newActivo } : a));
+    try { await api(`alumnos?id=eq.${alumno.id}`, "PATCH", { activo: newActivo }); }
+    catch (e) { setError("Error al actualizar"); loadData(); }
+  };
+
   const deleteAlumno = async (id) => {
     if (!confirm("¿Eliminar este alumno de todos los eventos?")) return;
     setAlumnos(prev => prev.filter(a => a.id !== id));
@@ -252,6 +260,7 @@ export default function App() {
           </div>
         </div>
         <div style={{ display: "flex", gap: 7, flexWrap: "wrap" }}>
+          <Btn icon="👥" label="Alumnos" onClick={() => setShowAlumnos(true)} color="#0d9488" />
           <Btn icon="🆕" label="Nuevo Evento" onClick={() => setShowNuevoEvento(true)} color="#8b5cf6" />
           <Btn icon="📋" label="Eventos" onClick={() => setShowHistorial(true)} color="#0ea5e9" />
           <Btn icon="📊" label="Estadísticas" onClick={() => setShowStats(true)} color="#6366f1" />
@@ -637,6 +646,58 @@ export default function App() {
           </table>
           <div style={{ marginTop: 10, fontSize: 12, color: "#475569", textAlign: "right" }}>{filteredAlumnos.length} alumnos</div>
         </div>
+      )}
+
+      {/* MODAL ALUMNOS */}
+      {showAlumnos && (
+        <Modal onClose={() => setShowAlumnos(false)} title="👥 Base de Alumnos">
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+            <div style={{ fontSize: 12, color: "#64748b" }}>
+              {alumnos.filter(a => a.activo).length} activos · {alumnos.filter(a => !a.activo).length} inactivos · {alumnos.length} total
+            </div>
+            <ActionBtn onClick={() => { setShowAlumnos(false); setShowNuevoAlumno(true); }} color="#3b82f6">+ Nuevo alumno</ActionBtn>
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: "60vh", overflowY: "auto" }}>
+            {[...alumnos].sort((a, b) => {
+              if (a.activo && !b.activo) return -1;
+              if (!a.activo && b.activo) return 1;
+              return a.nombre.localeCompare(b.nombre);
+            }).map(alumno => (
+              <div key={alumno.id} style={{
+                background: alumno.activo ? "#0f172a" : "#0a0a0f",
+                border: `1px solid ${alumno.activo ? "#334155" : "#1e293b"}`,
+                borderRadius: 8, padding: "10px 14px",
+                display: "flex", alignItems: "center", gap: 10,
+                opacity: alumno.activo ? 1 : 0.5
+              }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: alumno.activo ? "#f1f5f9" : "#64748b" }}>{alumno.nombre}</div>
+                  <div style={{ display: "flex", gap: 10, marginTop: 2 }}>
+                    {alumno.categoria && <span style={{ fontSize: 11, color: "#475569" }}>Cat: {alumno.categoria}</span>}
+                    {alumno.nivel && <span style={{ fontSize: 11, color: "#475569" }}>Niv: {alumno.nivel}</span>}
+                    {alumno.responsable && <span style={{ fontSize: 11, color: "#475569" }}>👤 {alumno.responsable}</span>}
+                    {alumno.telefono && <span style={{ fontSize: 11, color: "#475569" }}>📞 {alumno.telefono}</span>}
+                  </div>
+                </div>
+                <button
+                  onClick={() => toggleActivo(alumno)}
+                  style={{
+                    background: alumno.activo ? "#052e16" : "#1e293b",
+                    border: `1px solid ${alumno.activo ? "#22c55e" : "#334155"}`,
+                    borderRadius: 20, padding: "3px 10px", cursor: "pointer",
+                    fontSize: 11, fontWeight: 600,
+                    color: alumno.activo ? "#22c55e" : "#64748b",
+                    whiteSpace: "nowrap"
+                  }}>
+                  {alumno.activo ? "✓ Activo" : "Inactivo"}
+                </button>
+              </div>
+            ))}
+          </div>
+          <div style={{ marginTop: 10, fontSize: 11, color: "#475569", fontStyle: "italic" }}>
+            Los alumnos inactivos no se incluyen en nuevos eventos pero se mantienen en la base.
+          </div>
+        </Modal>
       )}
 
       {/* MODAL NUEVO EVENTO */}
