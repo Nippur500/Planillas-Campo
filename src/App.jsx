@@ -40,6 +40,10 @@ export default function App() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
   const [filterStatus, setFilterStatus] = useState("Todos");
+  const [filterCategoria, setFilterCategoria] = useState("Todos");
+  const [filterNivel, setFilterNivel] = useState("Todos");
+  const [sortField, setSortField] = useState("nombre");
+  const [showPendientes, setShowPendientes] = useState(false);
   const [search, setSearch] = useState("");
   const [showStats, setShowStats] = useState(false);
   const [showNuevoEvento, setShowNuevoEvento] = useState(false);
@@ -231,13 +235,21 @@ export default function App() {
 
   const diasRestantes = getDiasRestantes();
 
+  const torneosCats = ["Todos", ...Array.from(new Set(alumnos.map(a => a.categoria).filter(Boolean))).sort()];
+  const nivelesOpts = ["Todos", ...Array.from(new Set(alumnos.map(a => a.nivel).filter(Boolean))).sort()];
+
   const filteredAlumnos = alumnos.filter(a => {
     if (!eventoActivo) return false;
     const pago = getPago(a.id);
     const status = getStatus(pago, monto);
     if (filterStatus !== "Todos" && status.label !== filterStatus) return false;
+    if (filterCategoria !== "Todos" && a.categoria !== filterCategoria) return false;
+    if (filterNivel !== "Todos" && a.nivel !== filterNivel) return false;
     if (search && !a.nombre.toLowerCase().includes(search.toLowerCase()) && !a.categoria?.toLowerCase().includes(search.toLowerCase()) && !a.nivel?.toLowerCase().includes(search.toLowerCase())) return false;
     return true;
+  }).sort((a, b) => {
+    const av = a[sortField] ?? "", bv = b[sortField] ?? "";
+    return String(av).localeCompare(String(bv), undefined, { numeric: true });
   });
 
   const alDia = filteredAlumnos.filter(a => getStatus(getPago(a.id), monto).label === "Al día").length;
@@ -265,6 +277,7 @@ export default function App() {
           </div>
         </div>
         <div style={{ display: "flex", gap: 7, flexWrap: "wrap" }}>
+          <Btn icon="⚠️" label="Pendientes" onClick={() => setShowPendientes(true)} color="#dc2626" />
           <Btn icon="👥" label="Alumnos" onClick={() => setShowAlumnos(true)} color="#0d9488" />
           <Btn icon="🆕" label="Nuevo Evento" onClick={() => setShowNuevoEvento(true)} color="#8b5cf6" />
           <Btn icon="📋" label="Eventos" onClick={() => setShowHistorial(true)} color="#0ea5e9" />
@@ -384,10 +397,24 @@ export default function App() {
       {/* FILTERS */}
       <div style={{ padding: "12px 20px", display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
         <input placeholder="🔍 Buscar..." value={search} onChange={e => setSearch(e.target.value)}
-          style={{ background: "#1e293b", border: "1px solid #334155", borderRadius: 7, padding: "7px 12px", color: "#e2e8f0", fontSize: 13, outline: "none", width: 200 }} />
+          style={{ background: "#1e293b", border: "1px solid #334155", borderRadius: 7, padding: "7px 12px", color: "#e2e8f0", fontSize: 13, outline: "none", width: 180 }} />
         <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
-          style={{ background: "#1e293b", border: "1px solid #334155", borderRadius: 7, padding: "7px 12px", color: "#e2e8f0", fontSize: 13, outline: "none" }}>
+          style={{ background: "#1e293b", border: "1px solid #334155", borderRadius: 7, padding: "7px 10px", color: "#e2e8f0", fontSize: 13, outline: "none" }}>
           {["Todos", "Al día", "Seña pagada", "Sin pagar"].map(s => <option key={s}>{s}</option>)}
+        </select>
+        <select value={filterCategoria} onChange={e => setFilterCategoria(e.target.value)}
+          style={{ background: "#1e293b", border: "1px solid #334155", borderRadius: 7, padding: "7px 10px", color: "#e2e8f0", fontSize: 13, outline: "none" }}>
+          {torneosCats.map(c => <option key={c}>{c}</option>)}
+        </select>
+        <select value={filterNivel} onChange={e => setFilterNivel(e.target.value)}
+          style={{ background: "#1e293b", border: "1px solid #334155", borderRadius: 7, padding: "7px 10px", color: "#e2e8f0", fontSize: 13, outline: "none" }}>
+          {nivelesOpts.map(n => <option key={n}>{n}</option>)}
+        </select>
+        <select value={sortField} onChange={e => setSortField(e.target.value)}
+          style={{ background: "#1e293b", border: "1px solid #334155", borderRadius: 7, padding: "7px 10px", color: "#e2e8f0", fontSize: 13, outline: "none" }}>
+          <option value="nombre">Ordenar: Nombre</option>
+          <option value="categoria">Ordenar: Categoría</option>
+          <option value="nivel">Ordenar: Nivel</option>
         </select>
         <span style={{ marginLeft: "auto", fontSize: 12, color: "#475569" }}>{filteredAlumnos.length} alumnos</span>
       </div>
@@ -652,6 +679,71 @@ export default function App() {
           <div style={{ marginTop: 10, fontSize: 12, color: "#475569", textAlign: "right" }}>{filteredAlumnos.length} alumnos</div>
         </div>
       )}
+
+      {/* MODAL PENDIENTES */}
+      {showPendientes && (() => {
+        const pendientes = alumnos.filter(a => {
+          if (!eventoActivo) return false;
+          const pago = getPago(a.id);
+          const status = getStatus(pago, monto);
+          return status.label !== "Al día";
+        }).sort((a, b) => {
+          const sa = getStatus(getPago(a.id), monto);
+          const sb = getStatus(getPago(b.id), monto);
+          if (sa.label === "Sin pagar" && sb.label !== "Sin pagar") return -1;
+          if (sa.label !== "Sin pagar" && sb.label === "Sin pagar") return 1;
+          return a.nombre.localeCompare(b.nombre);
+        });
+        const totalDeuda = pendientes.reduce((s, a) => {
+          const pago = getPago(a.id);
+          const pagado = (Number(pago.seña) || 0) + (Number(pago.saldo) || 0);
+          return s + (monto > 0 ? monto - pagado : 0);
+        }, 0);
+        return (
+          <Modal onClose={() => setShowPendientes(false)} title={`⚠️ Pendientes — ${eventoActivo?.nombre}`}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+              <div style={{ fontSize: 12, color: "#64748b" }}>{pendientes.length} alumnos con deuda</div>
+              {monto > 0 && <div style={{ fontSize: 12, fontWeight: 600, color: "#ef4444" }}>Total pendiente: {fmt(totalDeuda)}</div>}
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: "60vh", overflowY: "auto" }}>
+              {pendientes.map(alumno => {
+                const pago = getPago(alumno.id);
+                const status = getStatus(pago, monto);
+                const pagado = (Number(pago.seña) || 0) + (Number(pago.saldo) || 0);
+                const debe = monto > 0 ? monto - pagado : null;
+                return (
+                  <div key={alumno.id} style={{ background: "#0f172a", border: `1px solid ${status.color}30`, borderRadius: 8, padding: "10px 14px" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 4 }}>
+                      <div>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: "#f1f5f9" }}>{alumno.nombre}</div>
+                        <div style={{ display: "flex", gap: 8, marginTop: 2 }}>
+                          {alumno.categoria && <span style={{ fontSize: 11, color: "#475569" }}>Cat: {alumno.categoria}</span>}
+                          {alumno.nivel && <span style={{ fontSize: 11, color: "#475569" }}>Niv: {alumno.nivel}</span>}
+                        </div>
+                      </div>
+                      <span style={{ fontSize: 11, fontWeight: 600, color: status.color, background: status.bg, padding: "2px 8px", borderRadius: 20, whiteSpace: "nowrap" }}>{status.label}</span>
+                    </div>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 6 }}>
+                      <div style={{ fontSize: 12, color: "#64748b" }}>
+                        {alumno.responsable && <span>👤 {alumno.responsable}</span>}
+                        {alumno.telefono && <span style={{ marginLeft: 8 }}>📞 {alumno.telefono}</span>}
+                      </div>
+                      <div style={{ textAlign: "right" }}>
+                        {pago.seña > 0 && <div style={{ fontSize: 11, color: "#8b5cf6" }}>Seña: {fmt(pago.seña)}</div>}
+                        {debe !== null && debe > 0 && <div style={{ fontSize: 12, fontWeight: 700, color: "#ef4444" }}>Debe: {fmt(debe)}</div>}
+                        {status.label === "Sin pagar" && monto > 0 && <div style={{ fontSize: 12, fontWeight: 700, color: "#ef4444" }}>Debe: {fmt(monto)}</div>}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+              {pendientes.length === 0 && (
+                <div style={{ textAlign: "center", padding: 20, color: "#22c55e", fontSize: 14 }}>🎉 Todos al día</div>
+              )}
+            </div>
+          </Modal>
+        );
+      })()}
 
       {/* MODAL ALUMNOS */}
       {showAlumnos && (
