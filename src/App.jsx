@@ -46,7 +46,7 @@ export default function App() {
   const [showNuevoAlumno, setShowNuevoAlumno] = useState(false);
   const [showHistorial, setShowHistorial] = useState(false);
   const [nuevoEvento, setNuevoEvento] = useState({ nombre: "", fecha: "", monto: "", fecha_cierre: "", notas: "" });
-  const [nuevoAlumno, setNuevoAlumno] = useState({ nombre: "", categoria: "", responsable: "", telefono: "" });
+  const [nuevoAlumno, setNuevoAlumno] = useState({ nombre: "", categoria: "", nivel: "", responsable: "", telefono: "" });
   const [editingPago, setEditingPago] = useState(null);
   const [editData, setEditData] = useState({});
   const [editingMonto, setEditingMonto] = useState(false);
@@ -113,7 +113,7 @@ export default function App() {
     if (!nuevoAlumno.nombre.trim()) return;
     setSaving(true);
     try {
-      const [al] = await api("alumnos", "POST", { nombre: nuevoAlumno.nombre.trim(), categoria: nuevoAlumno.categoria, responsable: nuevoAlumno.responsable || "", telefono: nuevoAlumno.telefono || "" });
+      const [al] = await api("alumnos", "POST", { nombre: nuevoAlumno.nombre.trim(), categoria: nuevoAlumno.categoria, nivel: nuevoAlumno.nivel || "", responsable: nuevoAlumno.responsable || "", telefono: nuevoAlumno.telefono || "" });
       setAlumnos(prev => [...prev, al].sort((a, b) => a.nombre.localeCompare(b.nombre)));
       // crear pago vacío para el alumno en el evento activo
       if (eventoActivo) {
@@ -223,7 +223,7 @@ export default function App() {
     const pago = getPago(a.id);
     const status = getStatus(pago, monto);
     if (filterStatus !== "Todos" && status.label !== filterStatus) return false;
-    if (search && !a.nombre.toLowerCase().includes(search.toLowerCase()) && !a.categoria?.toLowerCase().includes(search.toLowerCase())) return false;
+    if (search && !a.nombre.toLowerCase().includes(search.toLowerCase()) && !a.categoria?.toLowerCase().includes(search.toLowerCase()) && !a.nivel?.toLowerCase().includes(search.toLowerCase())) return false;
     return true;
   });
 
@@ -408,9 +408,12 @@ export default function App() {
                   </div>
                 </div>
 
-                {!isEditing && (alumno.categoria || alumno.responsable || alumno.telefono) && (
+                {!isEditing && (
                   <div style={{ marginBottom: 8, display: "flex", flexDirection: "column", gap: 3 }}>
-                    {alumno.categoria && <div style={{ fontSize: 11, color: "#64748b", textTransform: "uppercase", letterSpacing: 1 }}>{alumno.categoria}</div>}
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <div style={{ fontSize: 11, color: alumno.categoria ? "#64748b" : "#334155", textTransform: "uppercase", letterSpacing: 1 }}>Cat: {alumno.categoria || "—"}</div>
+                      <div style={{ fontSize: 11, color: alumno.nivel ? "#64748b" : "#334155", textTransform: "uppercase", letterSpacing: 1 }}>Niv: {alumno.nivel || "—"}</div>
+                    </div>
                     {alumno.responsable && <div style={{ fontSize: 12, color: "#94a3b8" }}>👤 {alumno.responsable}</div>}
                     {alumno.telefono && (
                       <div style={{ display: "flex", gap: 6 }}>
@@ -423,8 +426,8 @@ export default function App() {
                 )}
                 {isEditing && (
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginBottom: 8 }}>
-                    {[{k:"_categoria",l:"Categoría",v:alumno.categoria},{k:"_responsable",l:"Responsable",v:alumno.responsable},{k:"_telefono",l:"Teléfono/WhatsApp",v:alumno.telefono}].map(f => (
-                      <div key={f.k} style={{ gridColumn: f.k === "_categoria" ? "1 / -1" : "auto" }}>
+                    {[{k:"_categoria",l:"Categoría",v:alumno.categoria},{k:"_nivel",l:"Nivel",v:alumno.nivel},{k:"_responsable",l:"Responsable",v:alumno.responsable},{k:"_telefono",l:"Teléfono/WhatsApp",v:alumno.telefono}].map(f => (
+                      <div key={f.k}>
                         <label style={{ display: "block", fontSize: 9, color: "#64748b", marginBottom: 2, textTransform: "uppercase", letterSpacing: 1 }}>{f.l}</label>
                         <input value={editData[f.k] ?? f.v ?? ""} onChange={e => setEditData(p => ({ ...p, [f.k]: e.target.value }))}
                           style={{ background: "#0f172a", border: "1px solid #334155", borderRadius: 4, padding: "3px 8px", color: "#94a3b8", fontSize: 12, width: "100%", outline: "none", boxSizing: "border-box" }} />
@@ -490,6 +493,7 @@ export default function App() {
                         const alumnoUpdate = {};
                         if (editData._nombre !== undefined && editData._nombre !== alumno.nombre) alumnoUpdate.nombre = editData._nombre;
                         if (editData._categoria !== undefined) alumnoUpdate.categoria = editData._categoria;
+                        if (editData._nivel !== undefined) alumnoUpdate.nivel = editData._nivel;
                         if (editData._responsable !== undefined) alumnoUpdate.responsable = editData._responsable;
                         if (editData._telefono !== undefined) alumnoUpdate.telefono = editData._telefono;
                         if (Object.keys(alumnoUpdate).length > 0) {
@@ -527,7 +531,7 @@ export default function App() {
           <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 700 }}>
             <thead>
               <tr style={{ background: "#1e293b" }}>
-                {["Nombre","Categoría","Responsable","Teléfono","Seña","F. Seña","Saldo","F. Saldo","Estado","Observación",""].map(h => (
+                {["Nombre","Categoría","Nivel","Responsable","Teléfono","Seña","F. Seña","Saldo","F. Saldo","Estado","Observación",""].map(h => (
                   <th key={h} style={{ padding: "10px 12px", textAlign: "left", fontSize: 11, fontWeight: 600, letterSpacing: 1, textTransform: "uppercase", color: "#64748b", borderBottom: "1px solid #334155", whiteSpace: "nowrap" }}>{h}</th>
                 ))}
               </tr>
@@ -549,6 +553,10 @@ export default function App() {
                     <td style={{ padding: "8px 12px", fontSize: 12, color: "#64748b" }}>
                       {isEditing ? <input value={editData._categoria ?? alumno.categoria ?? ""} onChange={e => setEditData(p => ({ ...p, _categoria: e.target.value }))} style={{ background: "#0f172a", border: "1px solid #334155", borderRadius: 4, padding: "3px 6px", color: "#94a3b8", fontSize: 12, outline: "none", width: 90 }} />
                         : alumno.categoria}
+                    </td>
+                    <td style={{ padding: "8px 12px", fontSize: 12, color: "#64748b" }}>
+                      {isEditing ? <input value={editData._nivel ?? alumno.nivel ?? ""} onChange={e => setEditData(p => ({ ...p, _nivel: e.target.value }))} style={{ background: "#0f172a", border: "1px solid #334155", borderRadius: 4, padding: "3px 6px", color: "#94a3b8", fontSize: 12, outline: "none", width: 80 }} />
+                        : alumno.nivel}
                     </td>
                     <td style={{ padding: "8px 12px", fontSize: 12, color: "#94a3b8" }}>
                       {isEditing ? <input value={editData._responsable ?? alumno.responsable ?? ""} onChange={e => setEditData(p => ({ ...p, _responsable: e.target.value }))} style={{ background: "#0f172a", border: "1px solid #334155", borderRadius: 4, padding: "3px 6px", color: "#94a3b8", fontSize: 12, outline: "none", width: 110 }} />
@@ -589,6 +597,7 @@ export default function App() {
                             const alumnoUpdate = {};
                             if (editData._nombre !== undefined && editData._nombre !== alumno.nombre) alumnoUpdate.nombre = editData._nombre;
                             if (editData._categoria !== undefined) alumnoUpdate.categoria = editData._categoria;
+                            if (editData._nivel !== undefined) alumnoUpdate.nivel = editData._nivel;
                             if (editData._responsable !== undefined) alumnoUpdate.responsable = editData._responsable;
                             if (editData._telefono !== undefined) alumnoUpdate.telefono = editData._telefono;
                             if (Object.keys(alumnoUpdate).length > 0) {
@@ -684,7 +693,7 @@ export default function App() {
       {/* MODAL NUEVO ALUMNO */}
       {showNuevoAlumno && (
         <Modal onClose={() => setShowNuevoAlumno(false)} title="Nuevo Alumno">
-          {[{k:"nombre",l:"Nombre y Apellido"},{k:"categoria",l:"Categoría"},{k:"responsable",l:"Responsable (padre/madre)"},{k:"telefono",l:"Teléfono/WhatsApp"}].map(f => (
+          {[{k:"nombre",l:"Nombre y Apellido"},{k:"categoria",l:"Categoría"},{k:"nivel",l:"Nivel"},{k:"responsable",l:"Responsable (padre/madre)"},{k:"telefono",l:"Teléfono/WhatsApp"}].map(f => (
             <div key={f.k} style={{ marginBottom: 10 }}>
               <label style={{ display: "block", fontSize: 10, color: "#64748b", marginBottom: 3, textTransform: "uppercase", letterSpacing: 1 }}>{f.l}</label>
               <input value={nuevoAlumno[f.k]} onChange={e => setNuevoAlumno(p => ({ ...p, [f.k]: e.target.value }))}
