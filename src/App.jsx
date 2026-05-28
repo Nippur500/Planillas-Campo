@@ -211,17 +211,17 @@ export default function App() {
     catch (e) { setError("Error al eliminar"); loadData(); }
   };
 
-  const exportPendientes = (pendientes, getPago, monto, evento) => {
+  const exportPendientes = (pendientes, getPagoFn, montoVal, evento) => {
     const rows = pendientes.map(a => {
-      const p = getPago(a.id);
+      const p = getPagoFn(a.id);
       const pagado = (Number(p.seña) || 0) + (Number(p.saldo) || 0);
-      const debe = monto > 0 ? monto - pagado : "";
-      const status = getStatus(p, monto);
+      const debe = montoVal > 0 ? montoVal - pagado : "";
+      const status = getStatus(p, montoVal);
       return {
         Nombre: a.nombre, Categoría: a.categoria || "", Nivel: a.nivel || "",
         Responsable: a.responsable || "", Teléfono: a.telefono || "",
         Estado: status.label, "Seña pagada": p.seña || "", "Saldo pagado": p.saldo || "",
-        "Total pagado": pagado, "Monto total": monto, "Debe": debe,
+        "Total pagado": pagado, "Monto total": montoVal, "Debe": debe,
       };
     });
     const wb = XLSX.utils.book_new();
@@ -244,26 +244,26 @@ export default function App() {
     XLSX.writeFile(wb, "base_alumnos.xlsx");
   };
 
-  const exportEstadisticas = (filteredAlumnos, getPago, monto, eventoActivo, alDia, conSeña, sinPagar, totalSeña, totalSaldo) => {
+  const exportEstadisticas = (filteredAlumnosArg, getPagoFn, montoVal, evActivo, alDiaArg, conSenaArg, sinPagarArg, totalSenaArg, totalSaldoArg) => {
     const resumen = [
-      { Campo: "Evento", Valor: eventoActivo?.nombre || "" },
-      { Campo: "Monto por alumno", Valor: monto },
-      { Campo: "Total alumnos", Valor: filteredAlumnos.length },
-      { Campo: "Al día", Valor: alDia },
-      { Campo: "Seña pagada", Valor: conSeña },
-      { Campo: "Sin pagar", Valor: sinPagar },
-      { Campo: "Total señas cobradas", Valor: totalSeña },
-      { Campo: "Total saldos cobrados", Valor: totalSaldo },
-      { Campo: "Total recaudado", Valor: totalSeña + totalSaldo },
-      { Campo: "Total esperado", Valor: monto > 0 ? monto * filteredAlumnos.length : "" },
+      { Campo: "Evento", Valor: evActivo?.nombre || "" },
+      { Campo: "Monto por alumno", Valor: montoVal },
+      { Campo: "Total alumnos", Valor: filteredAlumnosArg.length },
+      { Campo: "Al día", Valor: alDiaArg },
+      { Campo: "Seña pagada", Valor: conSenaArg },
+      { Campo: "Sin pagar", Valor: sinPagarArg },
+      { Campo: "Total señas cobradas", Valor: totalSenaArg },
+      { Campo: "Total saldos cobrados", Valor: totalSaldoArg },
+      { Campo: "Total recaudado", Valor: totalSenaArg + totalSaldoArg },
+      { Campo: "Total esperado", Valor: montoVal > 0 ? montoVal * filteredAlumnosArg.length : "" },
     ];
-    const detalle = filteredAlumnos.map(a => {
-      const p = getPago(a.id);
+    const detalle = filteredAlumnosArg.map(a => {
+      const p = getPagoFn(a.id);
       const pagado = (Number(p.seña) || 0) + (Number(p.saldo) || 0);
       return {
         Nombre: a.nombre, Categoría: a.categoria || "", Nivel: a.nivel || "",
         Seña: p.seña || "", Saldo: p.saldo || "", "Total pagado": pagado,
-        "Monto total": monto, Estado: getStatus(p, monto).label,
+        "Monto total": montoVal, Estado: getStatus(p, montoVal).label,
       };
     });
     const wb = XLSX.utils.book_new();
@@ -273,8 +273,10 @@ export default function App() {
     const wsD = XLSX.utils.json_to_sheet(detalle);
     wsD["!cols"] = [25,14,12,12,12,14,14,14].map(w => ({ wch: w }));
     XLSX.utils.book_append_sheet(wb, wsD, "Detalle");
-    XLSX.writeFile(wb, `estadisticas_${eventoActivo?.nombre || "evento"}.xlsx`);
+    XLSX.writeFile(wb, `estadisticas_${evActivo?.nombre || "evento"}.xlsx`);
   };
+
+  const monto = eventoActivo?.monto || 0;
 
   const getDiasRestantes = () => {
     if (!eventoActivo?.fecha_cierre) return null;
