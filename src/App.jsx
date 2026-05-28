@@ -216,10 +216,15 @@ export default function App() {
     const parts = eventoActivo.fecha_cierre.split("/");
     let cierre;
     if (parts.length === 3) {
-      cierre = new Date(parts[2], parts[1] - 1, parts[0]);
+      cierre = new Date(Number(parts[2]), Number(parts[1]) - 1, Number(parts[0]));
+    } else if (parts.length === 2) {
+      const anio = hoy.getFullYear();
+      cierre = new Date(anio, Number(parts[1]) - 1, Number(parts[0]));
+      if (cierre < hoy) cierre.setFullYear(anio + 1);
     } else {
-      cierre = new Date(eventoActivo.fecha_cierre);
+      return null;
     }
+    if (isNaN(cierre.getTime())) return null;
     const diff = Math.ceil((cierre - hoy) / (1000 * 60 * 60 * 24));
     return diff;
   };
