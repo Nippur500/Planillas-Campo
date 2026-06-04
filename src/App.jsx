@@ -86,6 +86,8 @@ export default function App() {
 
   const getPago = (alumnoId) => pagos.find(p => p.alumno_id === alumnoId && p.evento_id === eventoActivo?.id) || {};
 
+  const monto = eventoActivo?.monto || 0;
+
   const crearEvento = async () => {
     if (!nuevoEvento.nombre.trim()) return;
     setSaving(true);
