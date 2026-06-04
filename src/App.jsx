@@ -276,7 +276,88 @@ export default function App() {
     XLSX.writeFile(wb, `estadisticas_${evActivo?.nombre || "evento"}.xlsx`);
   };
 
-  const monto = eventoActivo?.monto || 0;
+  const downloadStatsImage = (slicesArg, total, eventoNombre, montoVal, totalSenaVal, totalSaldoVal) => {
+    const W = 580, H = 300, scale = 2;
+    const canvas = document.createElement('canvas');
+    canvas.width = W * scale; canvas.height = H * scale;
+    const ctx = canvas.getContext('2d');
+    ctx.scale(scale, scale);
+
+    const rr = (x, y, w, h, r) => { ctx.beginPath(); ctx.moveTo(x+r,y); ctx.lineTo(x+w-r,y); ctx.arcTo(x+w,y,x+w,y+r,r); ctx.lineTo(x+w,y+h-r); ctx.arcTo(x+w,y+h,x+w-r,y+h,r); ctx.lineTo(x+r,y+h); ctx.arcTo(x,y+h,x,y+h-r,r); ctx.lineTo(x,y+r); ctx.arcTo(x,y,x+r,y,r); ctx.closePath(); };
+
+    // Fondo
+    ctx.fillStyle = '#0f172a'; ctx.fillRect(0, 0, W, H);
+    rr(10, 10, W-20, H-20, 12); ctx.fillStyle = '#1e293b'; ctx.fill();
+
+    // Título
+    ctx.fillStyle = '#f1f5f9'; ctx.font = 'bold 15px system-ui';
+    ctx.fillText(`📊 ${eventoNombre || 'Estadísticas'}`, 24, 40);
+    ctx.fillStyle = '#475569'; ctx.font = '11px system-ui';
+    ctx.fillText(`Total: ${total} alumnos`, 24, 58);
+
+    // Torta
+    const cx = 130, cy = 165, r = 90;
+    let startAngle = -Math.PI / 2;
+    slicesArg.forEach(s => {
+      const angle = (s.value / total) * 2 * Math.PI;
+      ctx.beginPath(); ctx.moveTo(cx, cy);
+      ctx.arc(cx, cy, r, startAngle, startAngle + angle);
+      ctx.closePath(); ctx.fillStyle = s.color; ctx.fill();
+      ctx.strokeStyle = '#1e293b'; ctx.lineWidth = 2; ctx.stroke();
+      // porcentaje dentro
+      const pct = Math.round((s.value / total) * 100);
+      if (pct > 8) {
+        const mid = startAngle + angle / 2;
+        const lx = cx + r * 0.65 * Math.cos(mid), ly = cy + r * 0.65 * Math.sin(mid);
+        ctx.fillStyle = '#fff'; ctx.font = 'bold 11px system-ui'; ctx.textAlign = 'center';
+        ctx.fillText(`${pct}%`, lx, ly + 4);
+      }
+      startAngle += angle;
+    });
+    ctx.textAlign = 'left';
+
+    // Leyenda
+    let ly2 = 90;
+    slicesArg.forEach(s => {
+      ctx.fillStyle = s.color; ctx.fillRect(255, ly2 - 9, 11, 11);
+      ctx.fillStyle = '#f1f5f9'; ctx.font = 'bold 12px system-ui';
+      ctx.fillText(s.label, 273, ly2);
+      ctx.fillStyle = '#64748b'; ctx.font = '10px system-ui';
+      ctx.fillText(`${s.value} alumnos  (${Math.round((s.value/total)*100)}%)`, 273, ly2+14);
+      ly2 += 42;
+    });
+
+    // Panel financiero
+    const px = 370, pw = W - px - 20, py = 72;
+    rr(px, py, pw, H - py - 20, 8); ctx.fillStyle = '#0f172a'; ctx.fill();
+    ctx.fillStyle = '#f59e0b'; ctx.font = 'bold 11px system-ui';
+    ctx.fillText('Resumen financiero', px + 12, py + 20);
+
+    const rows2 = [
+      { l: 'Monto por alumno', v: fmt(montoVal) || '—', c: '#f59e0b' },
+      { l: 'Total señas', v: fmt(totalSenaVal) || '$0', c: '#8b5cf6' },
+      { l: 'Total saldos', v: fmt(totalSaldoVal) || '$0', c: '#10b981' },
+      { l: 'Total recaudado', v: fmt(totalSenaVal + totalSaldoVal) || '$0', c: '#f59e0b' },
+    ];
+    let ry = py + 46;
+    rows2.forEach(row => {
+      ctx.strokeStyle = '#1e293b'; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(px+12, ry-14); ctx.lineTo(px+pw-12, ry-14); ctx.stroke();
+      ctx.fillStyle = '#64748b'; ctx.font = '10px system-ui'; ctx.fillText(row.l, px+12, ry);
+      ctx.fillStyle = row.c; ctx.font = 'bold 11px system-ui'; ctx.textAlign = 'right';
+      ctx.fillText(row.v, px+pw-12, ry); ctx.textAlign = 'left';
+      ry += 32;
+    });
+
+    // Footer
+    ctx.fillStyle = '#334155'; ctx.font = '9px system-ui';
+    ctx.fillText('Planillas Campo Gimnástico', W - 190, H - 15);
+
+    const link = document.createElement('a');
+    link.download = `estadisticas_${eventoNombre || 'evento'}.png`;
+    link.href = canvas.toDataURL('image/png');
+    link.click();
+  };
 
   const getDiasRestantes = () => {
     if (!eventoActivo?.fecha_cierre) return null;
@@ -991,7 +1072,10 @@ export default function App() {
                 <div style={{ background: "#0f172a", borderRadius: 8, border: "1px solid #f59e0b40", padding: 14 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
                     <div style={{ fontSize: 13, fontWeight: 600, color: "#f59e0b" }}>Resumen financiero — {eventoActivo?.nombre}</div>
-                    <ActionBtn onClick={() => exportEstadisticas(filteredAlumnos, getPago, monto, eventoActivo, alDia, conSeña, sinPagar, totalSeña, totalSaldo)} color="#10b981">⬇ Descargar</ActionBtn>
+                    <div style={{ display: "flex", gap: 6 }}>
+                      <ActionBtn onClick={() => downloadStatsImage(slices, total, eventoActivo?.nombre, monto, totalSeña, totalSaldo)} color="#6366f1">🖼 Imagen</ActionBtn>
+                      <ActionBtn onClick={() => exportEstadisticas(filteredAlumnos, getPago, monto, eventoActivo, alDia, conSeña, sinPagar, totalSeña, totalSaldo)} color="#10b981">⬇ Excel</ActionBtn>
+                    </div>
                   </div>
                   <SRow label="Monto por alumno" val={fmt(monto) || "Sin definir"} color="#f59e0b" />
                   <SRow label="Total señas cobradas" val={fmt(totalSeña)} color="#8b5cf6" />
