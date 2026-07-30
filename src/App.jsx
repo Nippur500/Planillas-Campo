@@ -60,7 +60,7 @@ export default function App() {
   const [cierreTemp, setCierreTemp] = useState("");
   const [editingNotas, setEditingNotas] = useState(false);
   const [notasTemp, setNotasTemp] = useState("");
-  const [viewMode, setViewMode] = useState("cards"); // "cards" o "table"
+  const [viewMode, setViewMode] = useState("cards");
 
   useEffect(() => { loadData(); }, []);
 
@@ -99,7 +99,6 @@ export default function App() {
         fecha_cierre: nuevoEvento.fecha_cierre || "",
         notas: nuevoEvento.notas || "",
       });
-      // crear pagos vacíos para todos los alumnos
       const pagosNuevos = alumnos.filter(a => a.activo).map(a => ({
         alumno_id: a.id, evento_id: ev.id,
         fecha_seña: "", seña: null, fecha_saldo: "", saldo: null, observacion: ""
@@ -122,7 +121,6 @@ export default function App() {
     try {
       const [al] = await api("alumnos", "POST", { nombre: nuevoAlumno.nombre.trim(), categoria: nuevoAlumno.categoria, nivel: nuevoAlumno.nivel || "", responsable: nuevoAlumno.responsable || "", telefono: nuevoAlumno.telefono || "" });
       setAlumnos(prev => [...prev, al].sort((a, b) => a.nombre.localeCompare(b.nombre)));
-      // crear pago vacío para el alumno en el evento activo
       if (eventoActivo) {
         const [pg] = await api("pagos", "POST", {
           alumno_id: al.id, evento_id: eventoActivo.id,
@@ -130,7 +128,7 @@ export default function App() {
         });
         setPagos(prev => [...prev, pg]);
       }
-      setNuevoAlumno({ nombre: "", categoria: "" });
+      setNuevoAlumno({ nombre: "", categoria: "", nivel: "", responsable: "", telefono: "" });
       setShowNuevoAlumno(false);
     } catch (e) { setError("Error al agregar alumno: " + e.message); }
     finally { setSaving(false); }
@@ -284,20 +282,13 @@ export default function App() {
     canvas.width = W * scale; canvas.height = H * scale;
     const ctx = canvas.getContext('2d');
     ctx.scale(scale, scale);
-
     const rr = (x, y, w, h, r) => { ctx.beginPath(); ctx.moveTo(x+r,y); ctx.lineTo(x+w-r,y); ctx.arcTo(x+w,y,x+w,y+r,r); ctx.lineTo(x+w,y+h-r); ctx.arcTo(x+w,y+h,x+w-r,y+h,r); ctx.lineTo(x+r,y+h); ctx.arcTo(x,y+h,x,y+h-r,r); ctx.lineTo(x,y+r); ctx.arcTo(x,y,x+r,y,r); ctx.closePath(); };
-
-    // Fondo
     ctx.fillStyle = '#0f172a'; ctx.fillRect(0, 0, W, H);
     rr(10, 10, W-20, H-20, 12); ctx.fillStyle = '#1e293b'; ctx.fill();
-
-    // Título
     ctx.fillStyle = '#f1f5f9'; ctx.font = 'bold 15px system-ui';
     ctx.fillText(`📊 ${eventoNombre || 'Estadísticas'}`, 24, 40);
     ctx.fillStyle = '#475569'; ctx.font = '11px system-ui';
     ctx.fillText(`Total: ${total} alumnos`, 24, 58);
-
-    // Torta
     const cx = 130, cy = 165, r = 90;
     let startAngle = -Math.PI / 2;
     slicesArg.forEach(s => {
@@ -306,7 +297,6 @@ export default function App() {
       ctx.arc(cx, cy, r, startAngle, startAngle + angle);
       ctx.closePath(); ctx.fillStyle = s.color; ctx.fill();
       ctx.strokeStyle = '#1e293b'; ctx.lineWidth = 2; ctx.stroke();
-      // porcentaje dentro
       const pct = Math.round((s.value / total) * 100);
       if (pct > 8) {
         const mid = startAngle + angle / 2;
@@ -317,8 +307,6 @@ export default function App() {
       startAngle += angle;
     });
     ctx.textAlign = 'left';
-
-    // Leyenda
     let ly2 = 90;
     slicesArg.forEach(s => {
       ctx.fillStyle = s.color; ctx.fillRect(255, ly2 - 9, 11, 11);
@@ -328,13 +316,10 @@ export default function App() {
       ctx.fillText(`${s.value} alumnos  (${Math.round((s.value/total)*100)}%)`, 273, ly2+14);
       ly2 += 42;
     });
-
-    // Panel financiero
     const px = 370, pw = W - px - 20, py = 72;
     rr(px, py, pw, H - py - 20, 8); ctx.fillStyle = '#0f172a'; ctx.fill();
     ctx.fillStyle = '#f59e0b'; ctx.font = 'bold 11px system-ui';
     ctx.fillText('Resumen financiero', px + 12, py + 20);
-
     const rows2 = [
       { l: 'Monto por alumno', v: fmt(montoVal) || '—', c: '#f59e0b' },
       { l: 'Total señas', v: fmt(totalSenaVal) || '$0', c: '#8b5cf6' },
@@ -350,11 +335,8 @@ export default function App() {
       ctx.fillText(row.v, px+pw-12, ry); ctx.textAlign = 'left';
       ry += 32;
     });
-
-    // Footer
     ctx.fillStyle = '#334155'; ctx.font = '9px system-ui';
     ctx.fillText('Planillas Campo Gimnástico', W - 190, H - 15);
-
     const link = document.createElement('a');
     link.download = `estadisticas_${eventoNombre || 'evento'}.png`;
     link.href = canvas.toDataURL('image/png');
@@ -377,12 +359,10 @@ export default function App() {
       return null;
     }
     if (isNaN(cierre.getTime())) return null;
-    const diff = Math.ceil((cierre - hoy) / (1000 * 60 * 60 * 24));
-    return diff;
+    return Math.ceil((cierre - hoy) / (1000 * 60 * 60 * 24));
   };
 
   const diasRestantes = getDiasRestantes();
-
   const torneosCats = ["Todos", ...Array.from(new Set(alumnos.map(a => a.categoria).filter(Boolean))).sort()];
   const nivelesOpts = ["Todos", ...Array.from(new Set(alumnos.map(a => a.nivel).filter(Boolean))).sort()];
 
@@ -447,37 +427,31 @@ export default function App() {
           <div style={{ fontSize: 11, color: "#64748b", textTransform: "uppercase", letterSpacing: 1 }}>Evento activo:</div>
           <div style={{ fontSize: 14, fontWeight: 700, color: "#f1f5f9" }}>{eventoActivo.nombre}</div>
           {eventoActivo.fecha && <div style={{ fontSize: 11, color: "#64748b" }}>📅 {eventoActivo.fecha}</div>}
-          {eventoActivo.fecha_cierre || true ? (
-            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <span style={{ fontSize: 11, color: "#64748b" }}>Cierre:</span>
-              {editingCierre ? (
-                <>
-                  <input value={cierreTemp} onChange={e => setCierreTemp(e.target.value)}
-                    onKeyDown={e => { if (e.key === "Enter") saveCierre(); if (e.key === "Escape") setEditingCierre(false); }}
-                    placeholder="dd/mm/aaaa" autoFocus
-                    style={{ background: "#0f172a", border: "1px solid #3b82f6", borderRadius: 5, padding: "2px 8px", color: "#f1f5f9", fontSize: 13, width: 120, outline: "none" }} />
-                  <ActionBtn onClick={saveCierre} color="#3b82f6">✓</ActionBtn>
-                  <ActionBtn onClick={() => setEditingCierre(false)} secondary>✕</ActionBtn>
-                </>
-              ) : (
-                <button onClick={() => { setEditingCierre(true); setCierreTemp(eventoActivo.fecha_cierre || ""); }}
-                  style={{
-                    background: diasRestantes !== null && diasRestantes <= 3 ? "#1c0a00" : "#1e293b",
-                    border: `1px solid ${diasRestantes !== null && diasRestantes <= 3 ? "#f97316" : "#334155"}`,
-                    borderRadius: 6, padding: "2px 10px", cursor: "pointer", display: "flex", alignItems: "center", gap: 6
-                  }}>
-                  <span style={{ fontSize: 12, fontWeight: 700, color: !eventoActivo.fecha_cierre ? "#f97316" : diasRestantes <= 0 ? "#ef4444" : diasRestantes <= 3 ? "#f97316" : "#22c55e" }}>
-                    {eventoActivo.fecha_cierre || "Definir cierre ✏️"}
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <span style={{ fontSize: 11, color: "#64748b" }}>Cierre:</span>
+            {editingCierre ? (
+              <>
+                <input value={cierreTemp} onChange={e => setCierreTemp(e.target.value)}
+                  onKeyDown={e => { if (e.key === "Enter") saveCierre(); if (e.key === "Escape") setEditingCierre(false); }}
+                  placeholder="dd/mm/aaaa" autoFocus
+                  style={{ background: "#0f172a", border: "1px solid #3b82f6", borderRadius: 5, padding: "2px 8px", color: "#f1f5f9", fontSize: 13, width: 120, outline: "none" }} />
+                <ActionBtn onClick={saveCierre} color="#3b82f6">✓</ActionBtn>
+                <ActionBtn onClick={() => setEditingCierre(false)} secondary>✕</ActionBtn>
+              </>
+            ) : (
+              <button onClick={() => { setEditingCierre(true); setCierreTemp(eventoActivo.fecha_cierre || ""); }}
+                style={{ background: diasRestantes !== null && diasRestantes <= 3 ? "#1c0a00" : "#1e293b", border: `1px solid ${diasRestantes !== null && diasRestantes <= 3 ? "#f97316" : "#334155"}`, borderRadius: 6, padding: "2px 10px", cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
+                <span style={{ fontSize: 12, fontWeight: 700, color: !eventoActivo.fecha_cierre ? "#f97316" : diasRestantes <= 0 ? "#ef4444" : diasRestantes <= 3 ? "#f97316" : "#22c55e" }}>
+                  {eventoActivo.fecha_cierre || "Definir cierre ✏️"}
+                </span>
+                {diasRestantes !== null && eventoActivo.fecha_cierre && (
+                  <span style={{ fontSize: 11, fontWeight: 600, color: diasRestantes <= 0 ? "#ef4444" : diasRestantes <= 3 ? "#f97316" : "#22c55e" }}>
+                    {diasRestantes <= 0 ? "⚠️ Vencido" : diasRestantes === 1 ? "⚠️ 1 día" : `⏳ ${diasRestantes} días`}
                   </span>
-                  {diasRestantes !== null && eventoActivo.fecha_cierre && (
-                    <span style={{ fontSize: 11, fontWeight: 600, color: diasRestantes <= 0 ? "#ef4444" : diasRestantes <= 3 ? "#f97316" : "#22c55e" }}>
-                      {diasRestantes <= 0 ? "⚠️ Vencido" : diasRestantes === 1 ? "⚠️ 1 día" : `⏳ ${diasRestantes} días`}
-                    </span>
-                  )}
-                </button>
-              )}
-            </div>
-          ) : null}
+                )}
+              </button>
+            )}
+          </div>
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
             <span style={{ fontSize: 11, color: "#64748b" }}>Monto:</span>
             {editingMonto ? (
@@ -596,7 +570,6 @@ export default function App() {
                     <span style={{ fontSize: 10, fontWeight: 600, color: status.color, background: status.bg, padding: "2px 8px", borderRadius: 20, whiteSpace: "nowrap" }}>{status.label}</span>
                   </div>
                 </div>
-
                 {!isEditing && (
                   <div style={{ marginBottom: 8, display: "flex", flexDirection: "column", gap: 3 }}>
                     <div style={{ display: "flex", gap: 8 }}>
@@ -607,8 +580,7 @@ export default function App() {
                     {alumno.telefono && (
                       <div style={{ display: "flex", gap: 6 }}>
                         <a href={`tel:${alumno.telefono}`} style={{ fontSize: 12, color: "#3b82f6", textDecoration: "none" }}>📞 {alumno.telefono}</a>
-                        <a href={`https://wa.me/${alumno.telefono.replace(/\D/g, "")}`} target="_blank" rel="noreferrer"
-                          style={{ fontSize: 12, color: "#22c55e", textDecoration: "none" }}>💬 WhatsApp</a>
+                        <a href={`https://wa.me/${alumno.telefono.replace(/\D/g, "")}`} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: "#22c55e", textDecoration: "none" }}>💬 WhatsApp</a>
                       </div>
                     )}
                   </div>
@@ -624,7 +596,6 @@ export default function App() {
                     ))}
                   </div>
                 )}
-
                 {monto > 0 && (
                   <div style={{ marginBottom: 10 }}>
                     <div style={{ height: 5, background: "#0f172a", borderRadius: 3, overflow: "hidden" }}>
@@ -636,7 +607,6 @@ export default function App() {
                     </div>
                   </div>
                 )}
-
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 10 }}>
                   <PayField label="Seña" amount={isEditing ? editData.seña ?? pago.seña : pago.seña}
                     date={isEditing ? editData.fecha_seña ?? pago.fecha_seña : pago.fecha_seña}
@@ -647,7 +617,6 @@ export default function App() {
                     editing={isEditing} onAmountChange={v => setEditData(p => ({ ...p, saldo: v }))}
                     onDateChange={v => setEditData(p => ({ ...p, fecha_saldo: v }))} color="#10b981" />
                 </div>
-
                 {!isEditing && pago.observacion ? <div style={{ fontSize: 12, marginBottom: 10 }}><span style={{ color: "#94a3b8" }}>💬 {pago.observacion}</span></div> : null}
                 {isEditing && (
                   <div style={{ fontSize: 12, marginBottom: 10 }}>
@@ -656,8 +625,6 @@ export default function App() {
                       style={{ background: "#0f172a", border: "1px solid #334155", borderRadius: 4, padding: "4px 8px", color: "#94a3b8", fontSize: 12, width: "100%", outline: "none", boxSizing: "border-box" }} />
                   </div>
                 )}
-
-                {/* WHATSAPP BUTTON - solo si tiene deuda y tiene teléfono */}
                 {!isEditing && status.label !== "Al día" && alumno.telefono && (() => {
                   const pagado = (Number(pago.seña) || 0) + (Number(pago.saldo) || 0);
                   const debe = monto > 0 ? monto - pagado : null;
@@ -673,7 +640,6 @@ export default function App() {
                     </a>
                   );
                 })()}
-
                 <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
                   {isEditing ? (
                     <>
@@ -914,13 +880,7 @@ export default function App() {
               if (!a.activo && b.activo) return 1;
               return a.nombre.localeCompare(b.nombre);
             }).map(alumno => (
-              <div key={alumno.id} style={{
-                background: alumno.activo ? "#0f172a" : "#0a0a0f",
-                border: `1px solid ${alumno.activo ? "#334155" : "#1e293b"}`,
-                borderRadius: 8, padding: "10px 14px",
-                display: "flex", alignItems: "center", gap: 10,
-                opacity: alumno.activo ? 1 : 0.5
-              }}>
+              <div key={alumno.id} style={{ background: alumno.activo ? "#0f172a" : "#0a0a0f", border: `1px solid ${alumno.activo ? "#334155" : "#1e293b"}`, borderRadius: 8, padding: "10px 14px", display: "flex", alignItems: "center", gap: 10, opacity: alumno.activo ? 1 : 0.5 }}>
                 <div style={{ flex: 1 }}>
                   <div style={{ fontSize: 13, fontWeight: 600, color: alumno.activo ? "#f1f5f9" : "#64748b" }}>{alumno.nombre}</div>
                   <div style={{ display: "flex", gap: 10, marginTop: 2 }}>
@@ -930,16 +890,8 @@ export default function App() {
                     {alumno.telefono && <span style={{ fontSize: 11, color: "#475569" }}>📞 {alumno.telefono}</span>}
                   </div>
                 </div>
-                <button
-                  onClick={() => toggleActivo(alumno)}
-                  style={{
-                    background: alumno.activo ? "#052e16" : "#1e293b",
-                    border: `1px solid ${alumno.activo ? "#22c55e" : "#334155"}`,
-                    borderRadius: 20, padding: "3px 10px", cursor: "pointer",
-                    fontSize: 11, fontWeight: 600,
-                    color: alumno.activo ? "#22c55e" : "#64748b",
-                    whiteSpace: "nowrap"
-                  }}>
+                <button onClick={() => toggleActivo(alumno)}
+                  style={{ background: alumno.activo ? "#052e16" : "#1e293b", border: `1px solid ${alumno.activo ? "#22c55e" : "#334155"}`, borderRadius: 20, padding: "3px 10px", cursor: "pointer", fontSize: 11, fontWeight: 600, color: alumno.activo ? "#22c55e" : "#64748b", whiteSpace: "nowrap" }}>
                   {alumno.activo ? "✓ Activo" : "Inactivo"}
                 </button>
               </div>
@@ -1100,7 +1052,7 @@ function exportToExcel(alumnos, getPago, monto, evento) {
     const pagado = (Number(p.seña) || 0) + (Number(p.saldo) || 0);
     const status = getStatus(p, monto);
     return {
-      Nombre: a.nombre, Categoría: a.categoria || "",
+      Nombre: a.nombre, Categoría: a.categoria || "", Nivel: a.nivel || "",
       "Fecha Seña": p.fecha_seña || "", Seña: p.seña || "",
       "Fecha Saldo": p.fecha_saldo || "", Saldo: p.saldo || "",
       "Total Pagado": pagado, "Monto Total": monto,
@@ -1109,7 +1061,7 @@ function exportToExcel(alumnos, getPago, monto, evento) {
   });
   const wb = XLSX.utils.book_new();
   const ws = XLSX.utils.json_to_sheet(rows);
-  ws["!cols"] = [25,15,12,12,12,12,12,12,14,20].map(w => ({ wch: w }));
+  ws["!cols"] = [25,15,12,12,12,12,12,12,12,14,20].map(w => ({ wch: w }));
   XLSX.utils.book_append_sheet(wb, ws, evento?.nombre || "Evento");
   XLSX.writeFile(wb, `${evento?.nombre || "planillas"}.xlsx`);
 }
